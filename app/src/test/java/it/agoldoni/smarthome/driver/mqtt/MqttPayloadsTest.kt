@@ -129,9 +129,56 @@ class SubscriptionsTest {
     }
 
     @Test
+    fun `il topic dei consumi si sottoscrive come gli altri`() {
+        val device = Device(
+            name = "boiler",
+            stateTopic = "casa/boiler/stato",
+            energyTopic = "casa/boiler/energia",
+        )
+        assertTrue(device.subscriptions.contains("casa/boiler/energia"))
+    }
+
+    @Test
+    fun `senza topic dei consumi non si sottoscrive niente in piu`() {
+        val device = Device(name = "boiler", stateTopic = "casa/boiler/stato")
+        assertEquals(listOf("casa/boiler/stato"), device.subscriptions)
+    }
+
+    @Test
     fun `non conoscere la raggiungibilita non significa irraggiungibile`() {
         assertFalse(DeviceState().unreachable)
         assertFalse(DeviceState(reachable = true).unreachable)
         assertTrue(DeviceState(reachable = false).unreachable)
+    }
+}
+
+/**
+ * La potenza istantanea: un numero che si legge accanto allo stato, non dentro.
+ * Zero e null qui non si equivalgono, e confonderli si vedrebbe sulla scheda —
+ * una presa che dice "0 W" sta lavorando ma non assorbe, una che non dice
+ * niente non deve mostrare nessun numero.
+ */
+class ReadNumberTest {
+
+    @Test
+    fun `legge un numero con la virgola`() {
+        assertEquals(35.2, readNumber("""{"stato":"ON","potenza_w":35.2}""", "potenza_w")!!, 0.001)
+    }
+
+    @Test
+    fun `legge uno zero, che e un valore come un altro`() {
+        assertEquals(0.0, readNumber("""{"stato":"ON","potenza_w":0}""", "potenza_w")!!, 0.001)
+    }
+
+    @Test
+    fun `campo assente o non numerico non produce un valore`() {
+        assertNull(readNumber("""{"stato":"ON"}""", "potenza_w"))
+        assertNull(readNumber("""{"potenza_w":"parecchia"}""", "potenza_w"))
+        assertNull(readNumber("ON", "potenza_w"))
+    }
+
+    @Test
+    fun `legge anche un campo annidato`() {
+        assertEquals(233.4, readNumber("""{"misure":{"potenza_w":233.4}}""", "misure.potenza_w")!!, 0.001)
     }
 }

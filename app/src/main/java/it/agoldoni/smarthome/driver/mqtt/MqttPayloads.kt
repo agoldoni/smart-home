@@ -49,6 +49,17 @@ internal fun extractJson(payload: String, path: String): String? {
 }
 
 /**
+ * Legge un numero da un campo del payload, per le misure che accompagnano lo
+ * stato (la potenza istantanea di una presa).
+ *
+ * Null quando il campo non c'e o non e un numero: un valore che non si e capito
+ * non deve cancellare l'ultimo buono, e nemmeno diventare uno zero che si
+ * leggerebbe come "non assorbe niente".
+ */
+internal fun readNumber(payload: String, path: String): Double? =
+    extractJson(payload, path)?.trim()?.toDoubleOrNull()
+
+/**
  * Decide se un payload di disponibilita dica "ci sono" o "non ci sono".
  *
  * Restituisce null quando non dice ne l'una ne l'altra cosa: da un valore che

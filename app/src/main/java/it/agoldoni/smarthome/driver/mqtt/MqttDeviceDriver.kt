@@ -162,6 +162,7 @@ class MqttDeviceDriver(
     override fun track(devices: List<Device>) {
         scope.launch {
             lock.withLock {
+                val precedenti = this@MqttDeviceDriver.devices.associateBy { it.id }
                 this@MqttDeviceDriver.devices = devices
                 DiagnosticsLog.event(
                     "dispositivi",
@@ -169,6 +170,22 @@ class MqttDeviceDriver(
                 )
                 val alive = devices.mapTo(mutableSetOf()) { it.id }
                 _states.update { current -> current.filterKeys { it in alive } }
+
+                // Un dispositivo modificato si risottoscrive ai propri topic,
+                // anche a quelli che aveva gia. I messaggi ritenuti il broker
+                // li consegna al momento della sottoscrizione: senza questo,
+                // correggere una chiave JSON lascerebbe la scheda vuota fino al
+                // prossimo messaggio, che su un topic lento sono minuti — e
+                // sembra che la correzione non abbia funzionato.
+                val cambiati = devices.filter { precedenti[it.id]?.equals(it) == false }
+                if (cambiati.isNotEmpty()) {
+                    val topic = cambiati.flatMapTo(mutableSetOf()) { it.subscriptions }
+                    subscribed = subscribed - topic
+                    DiagnosticsLog.event(
+                        "sottoscrizioni",
+                        "rifatte per ${cambiati.joinToString { it.name }}: configurazione cambiata",
+                    )
+                }
                 syncSubscriptions()
             }
         }
@@ -433,6 +450,12 @@ class MqttDeviceDriver(
                     updatedAt = now,
                     pending = false,
                 )
+                // Le misure si leggono dal payload intero e non dal valore
+                // gia estratto: `stato` e `potenza_w` sono due campi affiancati,
+                // non uno dentro l'altro.
+                device.powerJsonKey?.takeIf { it.isNotBlank() }?.let { key ->
+                    readNumber(payload, key)?.let { next = next.copy(watts = it) }
+                }
                 // Dimmer che pubblica tutto su un unico topic (il caso Tasmota).
                 if (device.dimmable && device.levelStateTopic.isNullOrBlank()) {
                     readLevel(device, payload)?.let { next = next.copy(level = it) }
@@ -453,6 +476,18 @@ class MqttDeviceDriver(
                         reachable = reachable,
                         pending = if (reachable) next.pending else false,
                     )
+                }
+            }
+
+            // L'energia non tocca `updatedAt`: un totale che arriva non
+            // significa che si sappia com'e adesso il dispositivo.
+            val energyTopic = device.energyTopic
+            if (!energyTopic.isNullOrBlank() && MqttTopics.matches(energyTopic, topic)) {
+                device.energyTodayJsonKey?.takeIf { it.isNotBlank() }?.let { key ->
+                    readNumber(payload, key)?.let { next = next.copy(kwhToday = it) }
+                }
+                device.energyMonthJsonKey?.takeIf { it.isNotBlank() }?.let { key ->
+                    readNumber(payload, key)?.let { next = next.copy(kwhMonth = it) }
                 }
             }
 

@@ -13,6 +13,19 @@ data class DeviceState(
     val level: Int? = null,
     /** Ultimo payload ricevuto, cosi com'e. E il valore mostrato dai sensori. */
     val raw: String? = null,
+    /**
+     * Potenza istantanea in watt, per chi la pubblica. Zero e null sono cose
+     * diverse: zero e una presa accesa che non assorbe niente — l'elettrodomestico
+     * attaccato e fermo — null e una presa che i watt non li dice.
+     */
+    val watts: Double? = null,
+    /**
+     * Energia accumulata in kWh: oggi e nel mese in corso. Arrivano da chi
+     * conta, non dalla presa, e restano null per i dispositivi che non hanno
+     * nessuno che conti per loro.
+     */
+    val kwhToday: Double? = null,
+    val kwhMonth: Double? = null,
     val updatedAt: Long? = null,
     /**
      * Comando inviato e conferma non ancora arrivata: l'interfaccia si muove

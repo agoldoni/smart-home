@@ -101,6 +101,7 @@ Un dispositivo di nome `boiler` occupa:
 | `casa/boiler/comando` | l'app | `ON`, `OFF` oppure `TOGGLE` |
 | `casa/boiler/disponibilita` | il ponte | `online` / `offline`, ritenuto |
 | `casa/boiler/dps/comando` | a mano | JSON grezzo, es. `{"1": true}` |
+| `casa/boiler/energia` | il ponte | JSON ritenuto, consumi accumulati. Vedi sotto |
 
 e il ponte nel suo insieme tiene `casa/ponte/stato`, con `offline` lasciato come testamento
 al broker.
@@ -126,6 +127,83 @@ con quello che il ponte sa già, e uno stato senza il dp dell'interruttore non v
 pubblicato affatto. Senza questa cura una presa accesa comparirebbe spenta ogni volta che
 la tensione oscilla, che è il genere di supposizione che su un interruttore si paga.
 
+## L'energia
+
+Le prese non pubblicano nessun consumo giornaliero, quindi lo accumula il ponte. Il topic
+`casa/<nome>/energia` porta i totali correnti:
+
+```json
+{"kwh_oggi":0.842,"kwh_mese":27.31,"giorno":"2026-09-12","mese":"2026-09",
+ "sorgente":"dp17","copertura_oggi":0.98}
+```
+
+`sorgente` dice da dove viene il numero e **non è un dettaglio**:
+
+- **`dp17`** — dal contatore interno della presa, che integra con le sue misure vere. Sei
+  prese su sette.
+- **`integrale`** — dai campioni di potenza che pubblichiamo noi, integrati nel tempo. Solo
+  la pompa, che il dp 17 non ce l'ha. Vale meno: le prese rinfrescano le misure a soglia, e
+  una potenza che resta ferma venti minuti integrata dà quello che dà.
+
+`copertura_oggi` è la frazione di giornata in cui il ponte ha davvero visto la presa. Un'ora
+in cui era irraggiungibile non va letta come un'ora di consumo basso, e con il dp 17 nemmeno
+come energia persa: la presa ha continuato a contare da sola e al ritorno il delta la
+restituisce — solo, finisce nell'ora in cui la si legge. Oltre un'ora di silenzio la lettura
+riparte da zero: meglio dichiarare persa un'ora che scaricare tre giorni di consumi dentro
+una riga sola.
+
+### L'archivio
+
+`stato/energia.db`, una riga per presa e per ora. **Dentro ci sono le tacche, non i kWh:**
+
+```sql
+CREATE TABLE energia_grezza (presa, inizio_utc, giorno, ora, grezzo, sorgente, copertura);
+CREATE TABLE fattori      (presa, sorgente, wh_per_unita);
+CREATE VIEW  energia AS   -- il join che moltiplica: è questo che si interroga
+  SELECT g.*, g.grezzo * f.wh_per_unita / 1000.0 AS kwh FROM energia_grezza g JOIN fattori f ...;
+```
+
+Il conteggio è un fatto, il fattore che lo trasforma in energia è un'interpretazione, e
+stanno in due tabelle diverse. **Quanto valga una tacca del dp 17 non è confermato**: lo
+schema Tuya standard dice 1 Wh, le misure fatte qui danno 0,4–0,8. Tararlo dopo non è un
+problema perché non tocca l'archivio — si cambia `wh_per_tacca` in `dispositivi.yaml` e
+dieci anni di righe cambiano valore insieme:
+
+```bash
+# dopo una taratura, per provare prima di metterla in configurazione
+sqlite3 stato/energia.db "UPDATE fattori SET wh_per_unita=0.92 WHERE sorgente='dp17'"
+```
+
+Per tarare serve un carico **resistivo, stabile e grosso**: il boiler da freddo per dieci
+minuti. Resistivo perché V × I = W si verifichi da sé, stabile perché energia = potenza ×
+tempo senza integrare niente, grosso perché a 2 kW le tacche arrivano ogni due secondi
+mentre a 3 W ne arriva una ogni venti minuti.
+
+### Le domande che si fanno
+
+```bash
+# i consumi di oggi, presa per presa
+sqlite3 -column stato/energia.db "SELECT presa, ROUND(SUM(kwh),3) FROM energia
+  WHERE giorno = date('now','localtime') GROUP BY presa ORDER BY 2 DESC"
+
+# il mese, con quanto ci si può fidare
+sqlite3 -column stato/energia.db "SELECT presa, ROUND(SUM(kwh),2) kwh, ROUND(AVG(copertura),2) visto
+  FROM energia WHERE giorno LIKE '2026-09%' GROUP BY presa ORDER BY kwh DESC"
+
+# a che ora si consuma, sull'ultimo mese
+sqlite3 -column stato/energia.db "SELECT ora, ROUND(SUM(kwh),2) FROM energia
+  WHERE presa='boiler' GROUP BY ora ORDER BY ora"
+
+# gli anni, quando ce ne saranno
+sqlite3 -column stato/energia.db "SELECT substr(giorno,1,4) anno, ROUND(SUM(kwh),1) FROM energia GROUP BY anno"
+```
+
+L'ora in corso non è ancora in archivio: vive in memoria e finisce in `stato/energia.json`
+una volta al minuto, così un riavvio del ponte ne perde al massimo sessanta secondi.
+
+> Il ponte gira come `${PUID:-1000}` proprio per questa cartella: da root, i file
+> dell'archivio nascerebbero di root dentro il progetto.
+
 ## Registrare le prese nell'app
 
 Per ciascuna, nel modulo *Aggiungi*:
@@ -135,8 +213,11 @@ Per ciascuna, nel modulo *Aggiungi*:
 | Tipo | Interruttore |
 | Topic di stato | `casa/boiler/stato` |
 | Campo JSON dello stato | `stato` |
+| Campo JSON della potenza | `potenza_w` |
 | Topic di comando | `casa/boiler/comando` |
 | Payload acceso / spento | `ON` / `OFF` |
+| Topic dei consumi | `casa/boiler/energia` |
+| Campo JSON dei kWh di oggi / del mese | `kwh_oggi` / `kwh_mese` |
 | Comandi ritenuti | no |
 
 Nelle impostazioni del broker vanno indirizzo, porta 1883 e le credenziali di `.env`.

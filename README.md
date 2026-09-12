@@ -51,6 +51,9 @@ Il pulsante **Aggiungi** apre il modulo. I campi che contano:
 | Tipo | Interruttore, Luce, Luce regolabile, Sensore. Cambia i controlli sulla scheda e i campi richiesti. |
 | Topic di stato | Dove il dispositivo pubblica. Ammette le wildcard `+` e `#`. |
 | Campo JSON dello stato | Da compilare solo se il payload è JSON: il percorso del campo, con il punto per i livelli annidati. |
+| Campo JSON della potenza | Il campo con i watt assorbiti, per chi li misura. Compilato, la scheda li mostra accanto allo stato. |
+| Topic dei consumi | Dove qualcuno pubblica i kWh accumulati. Sta a parte dallo stato perché è una grandezza con un altro tempo: un totale non si azzera quando la presa si spegne. |
+| Campo JSON dei kWh di oggi / del mese | I due campi da leggere in quel payload. La scheda li mostra su una riga sua, sotto lo stato. |
 | Topic di disponibilità | Dove il dispositivo dichiara di essere vivo. Facoltativo, ma senza di esso una scheda continua a mostrare l'ultimo stato anche quando il dispositivo non c'è più. |
 | Topic di comando | Dove l'app pubblica. Niente wildcard: il broker rifiuterebbe il messaggio. |
 | Payload acceso / spento | I due valori che il dispositivo capisce, e che l'app riconosce nello stato. |
@@ -111,6 +114,27 @@ Basta il topic di stato: la scheda mostra l'ultimo payload ricevuto, senza contr
 Le sette prese comprate con Smart Life non parlano MQTT, ma parlano in LAN: `bridge/` le
 traduce e le fa comparire all'app come un qualunque dispositivo MQTT, senza che qui dentro
 cambi una riga. Lì ci sono anche il broker e la VPN per l'accesso da fuori casa.
+
+Tutte e sette misurano i consumi, e il ponte pubblica i watt nello stesso payload dello
+stato. Una si registra così:
+
+```
+Topic di stato:            casa/frigorifero/stato
+Campo JSON dello stato:    stato
+Campo JSON della potenza:  potenza_w
+Topic di comando:          casa/frigorifero/comando
+Topic di disponibilità:    casa/frigorifero/disponibilita
+Topic dei consumi:         casa/frigorifero/energia
+Campo JSON kWh oggi/mese:  kwh_oggi / kwh_mese
+```
+
+La potenza compare sulla scheda accanto ad "Acceso", e risponde alla domanda che
+l'interruttore da solo non risponde: la presa è alimentata, ma l'elettrodomestico attaccato
+sta lavorando? Sotto, su una riga sua, i consumi accumulati — `0,84 kWh oggi · 27,3 questo
+mese` — che il ponte tiene ora per ora in un archivio interrogabile per giorni, mesi e anni
+(vedi `bridge/README.md`). Sotto i dieci watt il numero ha il decimale — fra `0,0 W` e `3,0 W` passa la
+differenza fra spento davvero e in attesa — sopra è intero. A presa spenta non si mostra:
+a relay aperto i watt sono zero per forza.
 
 ## Il broker
 

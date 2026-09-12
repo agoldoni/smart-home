@@ -21,8 +21,11 @@ import logging
 import os
 import socket
 import select
+import sqlite3
 import threading
 import time
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 import paho.mqtt.client as mqtt
 import tinytuya
@@ -30,6 +33,7 @@ import yaml
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 CONFIG = os.environ.get("CONFIG", "/app/dispositivi.yaml")
+STATO = os.environ.get("STATO", "/app/stato")
 
 # Chiave con cui Tuya cifra gli annunci in broadcast: e' la stessa per tutti i
 # dispositivi del mondo, non e' un segreto del singolo apparecchio.
@@ -122,6 +126,248 @@ class Scoperta(threading.Thread):
 
 
 # --------------------------------------------------------------------------
+# energia: accumulo e archivio
+# --------------------------------------------------------------------------
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS energia_grezza (
+    presa      TEXT    NOT NULL,
+    inizio_utc TEXT    NOT NULL,
+    giorno     TEXT    NOT NULL,
+    ora        INTEGER NOT NULL,
+    grezzo     REAL    NOT NULL,
+    sorgente   TEXT    NOT NULL,
+    copertura  REAL    NOT NULL,
+    PRIMARY KEY (presa, inizio_utc)
+);
+CREATE INDEX IF NOT EXISTS energia_per_giorno ON energia_grezza (giorno, presa);
+
+CREATE TABLE IF NOT EXISTS fattori (
+    presa        TEXT NOT NULL,
+    sorgente     TEXT NOT NULL,
+    wh_per_unita REAL NOT NULL,
+    PRIMARY KEY (presa, sorgente)
+);
+
+CREATE VIEW IF NOT EXISTS energia AS
+SELECT g.presa, g.inizio_utc, g.giorno, g.ora, g.copertura, g.sorgente, g.grezzo,
+       g.grezzo * f.wh_per_unita / 1000.0 AS kwh
+  FROM energia_grezza g
+  JOIN fattori f ON f.presa = g.presa AND f.sorgente = g.sorgente;
+"""
+
+
+class Archivio:
+    """Le righe orarie su file, e il fattore che le rende energia.
+
+    Nell'archivio finisce solo quello che la presa ha contato: le tacche, non i
+    kWh. Quanto valga una tacca e' un'interpretazione, sta in una riga a parte, e
+    la vista `energia` fa la moltiplicazione quando qualcuno guarda. Cosi' una
+    taratura fatta fra sei mesi aggiusta anche i sei mesi passati cambiando una
+    riga, invece di riscriverne cinquantamila — e non puo' riuscire a meta'.
+    """
+
+    def __init__(self, percorso):
+        self._lock = threading.Lock()
+        self._db = sqlite3.connect(percorso, check_same_thread=False)
+        # WAL perche' sqlite3 da riga di comando possa leggere mentre il ponte
+        # scrive: l'archivio si guarda soprattutto mentre il sistema e' vivo.
+        self._db.execute("PRAGMA journal_mode=WAL")
+        self._db.executescript(SCHEMA)
+        self._db.commit()
+
+    def dichiara_fattore(self, presa, sorgente, wh_per_unita):
+        """La configurazione e' la verita': all'avvio riallinea la riga."""
+        with self._lock:
+            self._db.execute(
+                "INSERT INTO fattori (presa, sorgente, wh_per_unita) VALUES (?, ?, ?) "
+                "ON CONFLICT(presa, sorgente) DO UPDATE SET wh_per_unita = excluded.wh_per_unita",
+                (presa, sorgente, wh_per_unita))
+            self._db.commit()
+
+    def scrivi(self, riga):
+        with self._lock:
+            self._db.execute(
+                "INSERT INTO energia_grezza "
+                "(presa, inizio_utc, giorno, ora, grezzo, sorgente, copertura) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT(presa, inizio_utc) DO UPDATE SET "
+                "grezzo = excluded.grezzo, sorgente = excluded.sorgente, "
+                "copertura = excluded.copertura",
+                riga)
+            self._db.commit()
+
+    def totale(self, presa, prefisso):
+        """kWh in archivio per un giorno ('2026-09-12') o un mese ('2026-09')."""
+        with self._lock:
+            somma, = self._db.execute(
+                "SELECT COALESCE(SUM(kwh), 0) FROM energia WHERE presa = ? AND giorno LIKE ?",
+                (presa, prefisso + "%")).fetchone()
+        return round(somma, 4)
+
+    def copertura(self, presa, prefisso):
+        with self._lock:
+            media, = self._db.execute(
+                "SELECT AVG(copertura) FROM energia_grezza WHERE presa = ? AND giorno LIKE ?",
+                (presa, prefisso + "%")).fetchone()
+        return round(media, 3) if media is not None else None
+
+
+class Contatore:
+    """L'energia di una presa, ora per ora.
+
+    Conta dal dp cumulativo della presa — che e' l'integrazione fatta da lei,
+    con le sue misure vere — e non dall'integrale della potenza che pubblichiamo
+    noi: quella resta ferma anche venti minuti, e integrarla sarebbe integrare un
+    numero vecchio. Il ripiego sull'integrale c'e' solo per le prese che il dp
+    cumulativo non ce l'hanno.
+
+    Il contatore della presa si azzera da solo (il cloud Tuya lo legge e lo
+    riporta a zero): un valore piu' basso del precedente non e' un errore, e' un
+    azzeramento, e quello che si e' letto e' tutto quel che ha contato da li'.
+    """
+
+    def __init__(self, nome, dp="17", wh_per_tacca=1.0, fuso="Europe/Rome",
+                 buco_massimo=3600, pausa_massima=30):
+        self.nome = nome
+        self.dp = str(dp) if dp else None
+        self.wh_per_unita = float(wh_per_tacca)
+        self.fuso = ZoneInfo(fuso)
+        # Oltre un'ora di silenzio la lettura fa da riferimento e non si somma:
+        # l'ora e' il periodo della riga, e scaricare tre giorni di consumi
+        # dentro la riga corrente sarebbe un numero falso in un posto preciso.
+        self.buco_massimo = buco_massimo
+        # Due letture piu' distanti di cosi' non fanno tempo coperto: la presa
+        # c'era anche allora, ma noi non la guardavamo.
+        self.pausa_massima = pausa_massima
+
+        self.sorgente = None
+        self._ora = None          # inizio dell'ora in corso, epoch
+        self._grezzo = 0.0
+        self._coperti = 0.0
+        self._ultimo_valore = None
+        self._ultimo_istante = None
+
+    # -- lettura ----------------------------------------------------------
+
+    @staticmethod
+    def _inizio_ora(istante):
+        return istante - (istante % 3600)
+
+    def aggiorna(self, adesso, dps=None, potenza_w=None):
+        """Una lettura (o un buco, con dps a None). Restituisce le righe chiuse."""
+        if self._ora is None:
+            self._ora = self._inizio_ora(adesso)
+        righe = self._chiudi_fino_a(adesso)
+
+        if dps is None:
+            return righe
+
+        # L'orologio di sistema puo' saltare (NTP, il PC che si risveglia). Un
+        # intervallo negativo non esiste e uno enorme e' un buco: in entrambi i
+        # casi non si somma tempo coperto.
+        intervallo = None
+        if self._ultimo_istante is not None:
+            intervallo = adesso - self._ultimo_istante
+            if intervallo < 0:
+                intervallo = None
+
+        valore = dps.get(self.dp) if self.dp else None
+        if isinstance(valore, (int, float)) and not isinstance(valore, bool):
+            self.sorgente = "dp" + self.dp
+            if (self._ultimo_valore is not None and intervallo is not None
+                    and intervallo <= self.buco_massimo):
+                if valore >= self._ultimo_valore:
+                    self._somma(valore - self._ultimo_valore, intervallo)
+                else:
+                    self._somma(valore, intervallo)
+            else:
+                self._copri(intervallo)
+            self._ultimo_valore = valore
+        elif self.sorgente is None or self.sorgente == "integrale":
+            # Nessun contatore: si integra la potenza, e la riga lo dichiara.
+            if potenza_w is not None:
+                self.sorgente = "integrale"
+                if intervallo is not None and intervallo <= self.pausa_massima:
+                    self._somma(potenza_w * intervallo / 3600.0, intervallo)
+
+        self._ultimo_istante = adesso
+        return righe
+
+    def _somma(self, quantita, intervallo):
+        if quantita > 0:
+            self._grezzo += quantita
+        self._copri(intervallo)
+
+    def _copri(self, intervallo):
+        if intervallo is not None and intervallo <= self.pausa_massima:
+            self._coperti += intervallo
+
+    # -- chiusura dell'ora ------------------------------------------------
+
+    def _chiudi_fino_a(self, adesso):
+        righe = []
+        while adesso >= self._ora + 3600:
+            righe.append(self.riga())
+            self._ora += 3600
+            self._grezzo = 0.0
+            self._coperti = 0.0
+        return righe
+
+    def riga(self):
+        # Prima della prima lettura l'ora in corso e' semplicemente questa: una
+        # riga vuota, non un errore. Chiamarla e' lecito da chiunque.
+        ora = self._ora if self._ora is not None else self._inizio_ora(time.time())
+        inizio = datetime.fromtimestamp(ora, timezone.utc)
+        locale = inizio.astimezone(self.fuso)
+        return (
+            self.nome,
+            inizio.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            locale.strftime("%Y-%m-%d"),
+            locale.hour,
+            round(self._grezzo, 4),
+            self.sorgente or "ignota",
+            round(min(self._coperti / 3600.0, 1.0), 3),
+        )
+
+    # -- quel che si pubblica ---------------------------------------------
+
+    @property
+    def kwh_parziale(self):
+        """L'ora in corso, non ancora in archivio."""
+        return self._grezzo * self.wh_per_unita / 1000.0
+
+    def oggi(self):
+        if self._ora is None:
+            return None, None
+        locale = datetime.fromtimestamp(self._ora, timezone.utc).astimezone(self.fuso)
+        return locale.strftime("%Y-%m-%d"), locale.strftime("%Y-%m")
+
+    # -- memoria fra un avvio e l'altro -----------------------------------
+
+    def stato(self):
+        return {
+            "ora": self._ora,
+            "grezzo": self._grezzo,
+            "coperti": self._coperti,
+            "ultimo_valore": self._ultimo_valore,
+            "sorgente": self.sorgente,
+        }
+
+    def riprendi(self, stato):
+        """Riparte da dove era. Un'ora vecchia non si riprende: si riparte puliti."""
+        if not stato or stato.get("ora") is None:
+            return
+        if time.time() - stato["ora"] >= 3600:
+            return
+        self._ora = stato["ora"]
+        self._grezzo = float(stato.get("grezzo") or 0.0)
+        self._coperti = float(stato.get("coperti") or 0.0)
+        self._ultimo_valore = stato.get("ultimo_valore")
+        self.sorgente = stato.get("sorgente")
+
+
+# --------------------------------------------------------------------------
 # una presa
 # --------------------------------------------------------------------------
 
@@ -129,7 +375,8 @@ class Presa(threading.Thread):
 
     daemon = True
 
-    def __init__(self, cfg, opzioni, scoperta, mqttc, prefisso, qos):
+    def __init__(self, cfg, opzioni, scoperta, mqttc, prefisso, qos,
+                 contatore=None, archivio=None):
         super().__init__(name=cfg["nome"])
         self.nome = cfg["nome"]
         self.dev_id = cfg["id"]
@@ -162,6 +409,16 @@ class Presa(threading.Thread):
         self._ultimo_stato = None
         self._disponibile = None
 
+        # L'energia: il contatore tiene l'ora in corso, l'archivio le ore
+        # chiuse. I due totali dell'archivio si rileggono solo quando un'ora si
+        # chiude, non a ogni giro: sono una query, e qui si passa ogni 2 secondi.
+        self.contatore = contatore
+        self.archivio = archivio
+        self._ultima_energia = None
+        self._archivio_giorno = 0.0
+        self._archivio_mese = 0.0
+        self._copertura = None
+
     # -- topic ------------------------------------------------------------
 
     @property
@@ -171,6 +428,10 @@ class Presa(threading.Thread):
     @property
     def topic_dps(self):
         return f"{self.base}/dps/comando"
+
+    @property
+    def topic_energia(self):
+        return f"{self.base}/energia"
 
     def _pubblica(self, topic, payload, ritenuto=True):
         self.mqttc.publish(topic, payload, qos=self.qos, retain=ritenuto)
@@ -183,6 +444,15 @@ class Presa(threading.Thread):
 
     # -- traduzione dps -> payload ----------------------------------------
 
+    def _lettura(self, nome, dps):
+        spec = self.letture.get(nome)
+        if not spec:
+            return None
+        grezzo = dps.get(str(spec["dp"]))
+        if not isinstance(grezzo, (int, float)) or isinstance(grezzo, bool):
+            return None
+        return grezzo / float(spec.get("scala", 1))
+
     def _payload_stato(self, dps, ip, versione):
         acceso = dps.get(self.dp_interruttore)
         corpo = {
@@ -191,11 +461,56 @@ class Presa(threading.Thread):
             "versione": versione,
             "dps": dps,
         }
-        for nome, spec in self.letture.items():
-            grezzo = dps.get(str(spec["dp"]))
-            if isinstance(grezzo, (int, float)):
-                corpo[nome] = grezzo / float(spec.get("scala", 1))
+        for nome in self.letture:
+            valore = self._lettura(nome, dps)
+            if valore is not None:
+                corpo[nome] = valore
         return json.dumps(corpo, separators=(",", ":"))
+
+    # -- energia ----------------------------------------------------------
+
+    def conta(self, dps):
+        """Una lettura al contatore, o un buco se dps e' None."""
+        if self.contatore is None:
+            return
+        potenza = self._lettura("potenza_w", dps) if dps is not None else None
+        for riga in self.contatore.aggiorna(time.time(), dps, potenza):
+            _, inizio, giorno, ora, grezzo, sorgente, copertura = riga
+            if self.archivio is not None:
+                self.archivio.scrivi(riga)
+            log.info("%s: %s ore %02d, %.1f %s, copertura %.0f%%",
+                     self.nome, giorno, ora, grezzo,
+                     "tacche" if sorgente.startswith("dp") else "Wh",
+                     copertura * 100)
+            self._rileggi_totali()
+        self._pubblica_energia()
+
+    def _rileggi_totali(self):
+        giorno, mese = self.contatore.oggi()
+        if giorno is None or self.archivio is None:
+            return
+        self._archivio_giorno = self.archivio.totale(self.nome, giorno)
+        self._archivio_mese = self.archivio.totale(self.nome, mese)
+        self._copertura = self.archivio.copertura(self.nome, giorno)
+
+    def _pubblica_energia(self):
+        giorno, mese = self.contatore.oggi()
+        if giorno is None:
+            return
+        parziale = self.contatore.kwh_parziale
+        corpo = {
+            "kwh_oggi": round(self._archivio_giorno + parziale, 3),
+            "kwh_mese": round(self._archivio_mese + parziale, 3),
+            "giorno": giorno,
+            "mese": mese,
+            "sorgente": self.contatore.sorgente or "ignota",
+        }
+        if self._copertura is not None:
+            corpo["copertura_oggi"] = self._copertura
+        payload = json.dumps(corpo, separators=(",", ":"))
+        if payload != self._ultima_energia:
+            self._ultima_energia = payload
+            self._pubblica(self.topic_energia, payload)
 
     # -- ciclo di vita ----------------------------------------------------
 
@@ -253,6 +568,10 @@ class Presa(threading.Thread):
             if d is None:
                 log.warning("%s: non ancora visto in rete, riprovo", self.nome)
                 self._segnala_disponibilita(False)
+                # Anche senza letture le ore vanno chiuse: una presa sparita per
+                # mezza giornata deve lasciare righe scoperte, non un vuoto che
+                # non si distingue da "non ancora scritto".
+                self.conta(None)
                 time.sleep(10)
                 continue
 
@@ -286,6 +605,7 @@ class Presa(threading.Thread):
                         risposta = self._leggi(d)
 
                     if not isinstance(risposta, dict) or "dps" not in risposta:
+                        self.conta(None)
                         fallimenti += 1
                         if fallimenti == 1:
                             log.debug("%s: risposta inattesa %s", self.nome, risposta)
@@ -304,6 +624,7 @@ class Presa(threading.Thread):
                     # dedurre "spento" dall'assenza del dp dell'interruttore,
                     # che e' esattamente la supposizione che sull'app si paga.
                     self._dps.update(risposta["dps"])
+                    self.conta(self._dps)
                     if self.dp_interruttore not in self._dps:
                         log.debug("%s: stato ancora parziale, aspetto", self.nome)
                         continue
@@ -374,6 +695,56 @@ class Presa(threading.Thread):
             log.warning("%s: dps non in JSON: %r", self.nome, payload)
 
 
+class Memoria(threading.Thread):
+    """L'ora in corso di tutte le prese, su file, una volta al minuto.
+
+    Serve a una cosa sola: un riavvio a meta' ora non deve buttare via quello
+    che si era gia' contato. Si perde al massimo un minuto, che e' il prezzo di
+    non scrivere su disco ogni due secondi per sette prese. Le ore chiuse non
+    passano di qui: quelle sono gia' in archivio.
+    """
+
+    daemon = True
+
+    def __init__(self, percorso, prese, intervallo=60):
+        super().__init__(name="memoria")
+        self.percorso = percorso
+        self.prese = prese
+        self.intervallo = intervallo
+
+    def riprendi(self):
+        try:
+            with open(self.percorso, encoding="utf-8") as f:
+                salvato = json.load(f)
+        except FileNotFoundError:
+            return
+        except Exception as e:
+            log.warning("memoria illeggibile (%s): l'ora in corso riparte da zero", e)
+            return
+        for nome, presa in self.prese.items():
+            if presa.contatore is not None:
+                presa.contatore.riprendi(salvato.get(nome))
+                presa._rileggi_totali()
+
+    def salva(self):
+        corpo = {nome: p.contatore.stato()
+                 for nome, p in self.prese.items() if p.contatore is not None}
+        # Scrittura in due tempi: un'interruzione a meta' lascia il file vecchio
+        # intero invece di uno nuovo troncato.
+        temporaneo = self.percorso + ".nuovo"
+        try:
+            with open(temporaneo, "w", encoding="utf-8") as f:
+                json.dump(corpo, f)
+            os.replace(temporaneo, self.percorso)
+        except Exception as e:
+            log.warning("memoria non scritta (%s)", e)
+
+    def run(self):
+        while True:
+            time.sleep(self.intervallo)
+            self.salva()
+
+
 # --------------------------------------------------------------------------
 # avvio
 # --------------------------------------------------------------------------
@@ -398,6 +769,19 @@ def main():
     prefisso = cfg.get("mqtt", {}).get("prefisso", "casa")
     qos = int(cfg.get("mqtt", {}).get("qos", 1))
     opzioni = cfg.get("tuya", {})
+    energia = opzioni.get("energia") or {}
+
+    archivio = None
+    if energia.get("attiva", True):
+        percorso = os.path.join(STATO, energia.get("archivio", "energia.db"))
+        try:
+            os.makedirs(STATO, exist_ok=True)
+            archivio = Archivio(percorso)
+            log.info("archivio dell'energia in %s", percorso)
+        except Exception as e:
+            # Non e' un motivo per non accendere le luci: il ponte continua a
+            # fare il ponte, e si limita a non registrare i consumi.
+            log.error("archivio non disponibile (%s): l'energia non viene registrata", e)
 
     scoperta = Scoperta()
     scoperta.start()
@@ -409,9 +793,28 @@ def main():
         mqttc.username_pw_set(utente, os.environ.get("MQTT_PASS", ""))
     mqttc.will_set(f"{prefisso}/ponte/stato", "offline", qos=qos, retain=True)
 
+    fuso = energia.get("fuso") or os.environ.get("TZ") or "Europe/Rome"
+    dp_contatore = energia.get("dp_contatore", "17")
+    wh_per_tacca = float(energia.get("wh_per_tacca", 1.0))
+
     prese = {}
     for voce in cfg["dispositivi"]:
-        p = Presa(voce, opzioni, scoperta, mqttc, prefisso, qos)
+        contatore = None
+        if archivio is not None:
+            contatore = Contatore(
+                voce["nome"],
+                dp=voce.get("dp_contatore", dp_contatore),
+                wh_per_tacca=float(voce.get("wh_per_tacca", wh_per_tacca)),
+                fuso=fuso,
+            )
+            # Le due righe di fattori si dichiarano subito, prima di sapere da
+            # quale sorgente contera' questa presa: la vista e' un JOIN, e senza
+            # la riga giusta le sue ore sparirebbero dalle somme.
+            if contatore.dp:
+                archivio.dichiara_fattore(contatore.nome, "dp" + contatore.dp,
+                                          contatore.wh_per_unita)
+            archivio.dichiara_fattore(contatore.nome, "integrale", 1.0)
+        p = Presa(voce, opzioni, scoperta, mqttc, prefisso, qos, contatore, archivio)
         prese[p.nome] = p
 
     def on_connect(client, _userdata, _flags, motivo, _props=None):
@@ -441,6 +844,12 @@ def main():
     porta = int(os.environ.get("MQTT_PORT", "1883"))
     log.info("ponte per %d dispositivi, broker %s:%d, prefisso %s/",
              len(prese), host, porta, prefisso)
+    memoria = None
+    if archivio is not None:
+        memoria = Memoria(os.path.join(STATO, "energia.json"), prese)
+        memoria.riprendi()
+        memoria.start()
+
     mqttc.connect_async(host, porta, keepalive=60)
     mqttc.loop_start()
 
@@ -453,6 +862,8 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
+        if memoria is not None:
+            memoria.salva()
         mqttc.publish(f"{prefisso}/ponte/stato", "offline", qos=qos, retain=True)
         mqttc.loop_stop()
 

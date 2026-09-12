@@ -251,6 +251,10 @@ internal class DebugReport(
             if (state?.reachable == false) {
                 put("${device.name}: dichiarato non raggiungibile sul topic di disponibilita")
             }
+            if (!device.energyTopic.isNullOrBlank() && device.energyTodayJsonKey.isNullOrBlank()) {
+                put("${device.name}: topic dei consumi ${device.energyTopic} sottoscritto, " +
+                    "ma nessun campo JSON da leggerci dentro: i messaggi arrivano e vengono buttati")
+            }
         }
     }
 
@@ -268,6 +272,7 @@ internal class DebugReport(
                 putOrNull("availability", device.availabilityTopic)
                 putOrNull("levelState", device.levelStateTopic)
                 putOrNull("levelCommand", device.levelCommandTopic)
+                putOrNull("energy", device.energyTopic)
             })
             put("payloads", JSONObject().apply {
                 put("on", device.payloadOn)
@@ -275,6 +280,9 @@ internal class DebugReport(
                 put("available", device.payloadAvailable)
                 put("unavailable", device.payloadUnavailable)
                 putOrNull("stateJsonKey", device.stateJsonKey)
+                putOrNull("powerJsonKey", device.powerJsonKey)
+                putOrNull("energyTodayJsonKey", device.energyTodayJsonKey)
+                putOrNull("energyMonthJsonKey", device.energyMonthJsonKey)
                 putOrNull("levelJsonKey", device.levelJsonKey)
                 put("levelMax", device.levelMax)
             })
@@ -294,6 +302,9 @@ internal class DebugReport(
         putOrNull("power", state.power)
         putOrNull("level", state.level)
         putOrNull("raw", state.raw)
+        putOrNull("watts", state.watts)
+        putOrNull("kwhToday", state.kwhToday)
+        putOrNull("kwhMonth", state.kwhMonth)
         putOrNull("reachable", state.reachable)
         put("pending", state.pending)
         stamp("updatedAt", state.updatedAt)

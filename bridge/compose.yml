@@ -27,6 +27,10 @@ services:
     image: smart-home/tuya-mqtt:latest
     container_name: sh-ponte
     restart: unless-stopped
+    # Come il broker: senza, i file dell'archivio nascerebbero di root dentro
+    # la cartella del progetto. La scoperta usa UDP 6666/6667, porte alte:
+    # nessun privilegio da perdere.
+    user: "${PUID:-1000}:${PGID:-1000}"
     # Rete host: i Tuya si annunciano in broadcast UDP su 6666/6667 e un
     # container in bridge non li vedrebbe mai.
     network_mode: host
@@ -39,6 +43,7 @@ services:
       LIVELLO_LOG: ${LIVELLO_LOG:-INFO}
     volumes:
       - ./dispositivi.yaml:/app/dispositivi.yaml:ro
+      - ./stato:/app/stato
     depends_on:
       broker:
         condition: service_healthy

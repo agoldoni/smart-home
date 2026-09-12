@@ -12,6 +12,15 @@ chiavi/
 mosquitto/config/passwd
 wireguard/
 
+# Bytecode di Python, generato girando le prove
+__pycache__/
+
+# L'archivio dei consumi e l'ora in corso: sono dati, non codice. Come per
+# mosquitto, la cartella resta versionata perche' il bind mount la vuole gia'
+# li' e dell'utente giusto.
+stato/*
+!stato/.gitkeep
+
 # Persistenza del broker: si riscrive da sola a ogni avvio, nei diff e' solo
 # rumore. La cartella pero' resta versionata: il bind mount di compose la vuole
 # gia' li' e dell'utente giusto, perche' creata da Docker sarebbe di root e

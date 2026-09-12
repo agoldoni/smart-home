@@ -43,6 +43,23 @@ data class Device(
      */
     val stateJsonKey: String? = null,
     /**
+     * Campo JSON dello stato che porta la potenza istantanea in watt. Null
+     * quando il dispositivo non la misura: senza un campo da cui leggerla la
+     * scheda non mostra nessun numero, invece di inventarne uno.
+     */
+    val powerJsonKey: String? = null,
+    /**
+     * Topic su cui arrivano i consumi accumulati, per chi li tiene. Sta a parte
+     * dallo stato perche' e' una grandezza con un altro tempo: lo stato e una
+     * fotografia dell'istante, l'energia un totale che non si azzera quando la
+     * presa si spegne.
+     */
+    val energyTopic: String? = null,
+    /** Campo JSON con i kWh di oggi, dentro il payload dell'energia. */
+    val energyTodayJsonKey: String? = null,
+    /** Campo JSON con i kWh del mese in corso. */
+    val energyMonthJsonKey: String? = null,
+    /**
      * Topic su cui il dispositivo, o chi lo rappresenta, dichiara di essere
      * raggiungibile. Vuoto quando non ce n'e uno: in quel caso l'app non sa se
      * il dispositivo sia vivo, e non finge di saperlo.
@@ -73,5 +90,6 @@ data class Device(
             stateTopic.takeIf { it.isNotBlank() },
             availabilityTopic?.takeIf { it.isNotBlank() },
             levelStateTopic?.takeIf { it.isNotBlank() },
+            energyTopic?.takeIf { it.isNotBlank() },
         )
 }

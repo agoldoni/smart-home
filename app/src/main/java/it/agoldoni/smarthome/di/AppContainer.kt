@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.room.Room
 import it.agoldoni.smarthome.data.DeviceRepository
 import it.agoldoni.smarthome.data.local.MIGRATION_1_2
+import it.agoldoni.smarthome.data.local.MIGRATION_2_3
+import it.agoldoni.smarthome.data.local.MIGRATION_3_4
 import it.agoldoni.smarthome.data.local.SmartHomeDatabase
 import it.agoldoni.smarthome.data.settings.BrokerSettingsStore
 import it.agoldoni.smarthome.diagnostics.DebugBridge
@@ -34,7 +36,7 @@ class AppContainer(context: Context) {
 
     private val database: SmartHomeDatabase by lazy {
         Room.databaseBuilder(applicationContext, SmartHomeDatabase::class.java, "smart-home.db")
-            .addMigrations(MIGRATION_1_2)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
             .build()
     }
 

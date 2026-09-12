@@ -25,6 +25,10 @@ data class DeviceForm(
     val payloadOn: String = "ON",
     val payloadOff: String = "OFF",
     val stateJsonKey: String = "",
+    val powerJsonKey: String = "",
+    val energyTopic: String = "",
+    val energyTodayJsonKey: String = "",
+    val energyMonthJsonKey: String = "",
     val availabilityTopic: String = "",
     val payloadAvailable: String = "online",
     val payloadUnavailable: String = "offline",
@@ -44,6 +48,7 @@ data class DeviceEditUiState(
     val stateTopicError: String? = null,
     val commandTopicError: String? = null,
     val levelCommandTopicError: String? = null,
+    val energyTodayJsonKeyError: String? = null,
     /** Salvataggio o cancellazione conclusi: la schermata si chiude. */
     val closed: Boolean = false,
 )
@@ -74,6 +79,7 @@ class DeviceEditViewModel(
                 stateTopicError = null,
                 commandTopicError = null,
                 levelCommandTopicError = null,
+                energyTodayJsonKeyError = null,
             )
         }
     }
@@ -121,7 +127,17 @@ class DeviceEditViewModel(
             else -> null
         }
 
-        val errors = listOf(nameError, stateTopicError, commandTopicError, levelCommandTopicError)
+        // Un topic dei consumi senza il campo da leggerci dentro e il modo piu
+        // silenzioso di non funzionare: l'app si iscrive, i messaggi arrivano,
+        // e la scheda resta vuota senza che niente lo dica.
+        val energyTodayJsonKeyError = when {
+            form.energyTopic.isBlank() -> null
+            form.energyTodayJsonKey.isBlank() -> "Serve il campo da leggere nel payload dei consumi"
+            else -> null
+        }
+
+        val errors = listOf(nameError, stateTopicError, commandTopicError,
+                            levelCommandTopicError, energyTodayJsonKeyError)
         if (errors.all { it == null }) return null
 
         return _uiState.value.copy(
@@ -129,6 +145,7 @@ class DeviceEditViewModel(
             stateTopicError = stateTopicError,
             commandTopicError = commandTopicError,
             levelCommandTopicError = levelCommandTopicError,
+            energyTodayJsonKeyError = energyTodayJsonKeyError,
         )
     }
 }
@@ -144,6 +161,10 @@ private fun Device.toForm() = DeviceForm(
     payloadOn = payloadOn,
     payloadOff = payloadOff,
     stateJsonKey = stateJsonKey.orEmpty(),
+    powerJsonKey = powerJsonKey.orEmpty(),
+    energyTopic = energyTopic.orEmpty(),
+    energyTodayJsonKey = energyTodayJsonKey.orEmpty(),
+    energyMonthJsonKey = energyMonthJsonKey.orEmpty(),
     availabilityTopic = availabilityTopic.orEmpty(),
     payloadAvailable = payloadAvailable,
     payloadUnavailable = payloadUnavailable,
@@ -165,6 +186,10 @@ private fun DeviceForm.toDevice(id: Long) = Device(
     payloadOn = payloadOn.ifBlank { "ON" },
     payloadOff = payloadOff.ifBlank { "OFF" },
     stateJsonKey = stateJsonKey.trim().takeIf { it.isNotEmpty() },
+    powerJsonKey = powerJsonKey.trim().takeIf { it.isNotEmpty() },
+    energyTopic = energyTopic.trim().takeIf { it.isNotEmpty() },
+    energyTodayJsonKey = energyTodayJsonKey.trim().takeIf { it.isNotEmpty() },
+    energyMonthJsonKey = energyMonthJsonKey.trim().takeIf { it.isNotEmpty() },
     availabilityTopic = availabilityTopic.trim().takeIf { it.isNotEmpty() },
     payloadAvailable = payloadAvailable.ifBlank { "online" },
     payloadUnavailable = payloadUnavailable.ifBlank { "offline" },

@@ -150,6 +150,40 @@ fun DeviceEditScreen(
                 label = stringResource(R.string.field_state_json_key),
                 helper = stringResource(R.string.helper_state_json_key),
             )
+            FormField(
+                value = form.powerJsonKey,
+                onValueChange = { value -> viewModel.edit { it.copy(powerJsonKey = value) } },
+                label = stringResource(R.string.field_power_json_key),
+                helper = stringResource(R.string.helper_power_json_key),
+            )
+
+            SectionHeader(stringResource(R.string.section_energy))
+
+            FormField(
+                value = form.energyTopic,
+                onValueChange = { value -> viewModel.edit { it.copy(energyTopic = value) } },
+                label = stringResource(R.string.field_energy_topic),
+                helper = stringResource(R.string.helper_energy_topic),
+            )
+            // Le due chiavi servono solo a chi ha un topic dei consumi: senza,
+            // sarebbero due caselle che non governano niente.
+            if (form.energyTopic.isNotBlank()) {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    FormField(
+                        value = form.energyTodayJsonKey,
+                        onValueChange = { value -> viewModel.edit { it.copy(energyTodayJsonKey = value) } },
+                        label = stringResource(R.string.field_energy_today_json_key),
+                        error = state.energyTodayJsonKeyError,
+                        modifier = Modifier.weight(1f),
+                    )
+                    FormField(
+                        value = form.energyMonthJsonKey,
+                        onValueChange = { value -> viewModel.edit { it.copy(energyMonthJsonKey = value) } },
+                        label = stringResource(R.string.field_energy_month_json_key),
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
 
             SectionHeader(stringResource(R.string.section_availability))
 

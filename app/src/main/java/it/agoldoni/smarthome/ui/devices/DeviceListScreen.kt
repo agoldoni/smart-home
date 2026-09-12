@@ -66,6 +66,7 @@ import it.agoldoni.smarthome.ui.common.iconRes
 import it.agoldoni.smarthome.ui.common.labelRes
 import it.agoldoni.smarthome.ui.theme.debugRed
 import it.agoldoni.smarthome.ui.theme.poweredColors
+import java.util.Locale
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -371,6 +372,18 @@ private fun DeviceCard(
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
+                    // I consumi su una riga loro: non sono lo stato di adesso, e
+                    // appiccicarli alla riga dello stato la rende illeggibile
+                    // proprio sulle schede che hanno piu da dire.
+                    energyLine(item)?.let { consumi ->
+                        Text(
+                            text = consumi,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = faded,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
                 if (device.controllable) {
                     Spacer(Modifier.width(12.dp))
@@ -428,8 +441,42 @@ private fun statusLine(item: DeviceUi): String {
 
     val power = powerLabel(item)
     val level = state.level?.let { stringResource(R.string.state_level, it) }
-    return listOfNotNull(power.takeIf { it.isNotBlank() }, level).joinToString(" · ")
+    // I watt di un dispositivo che si sa spento non si mostrano: a relay aperto
+    // sono zero per forza, e "Spento · 0 W" non aggiunge niente a "Spento". Su
+    // uno acceso invece dicono la cosa che l'interruttore da solo non dice —
+    // la lavastoviglie e alimentata, ma sta lavorando?
+    val watts = state.watts
+        ?.takeIf { state.power != false }
+        ?.let { stringResource(R.string.state_power, formatWatts(it)) }
+    return listOfNotNull(power.takeIf { it.isNotBlank() }, level, watts).joinToString(" · ")
 }
+
+/**
+ * I kWh accumulati, quando qualcuno li conta. Il mese si mostra solo se c'e:
+ * il primo del mese e il totale di oggi, e ripeterlo due volte sarebbe rumore.
+ */
+@Composable
+private fun energyLine(item: DeviceUi): String? {
+    val oggi = item.state.kwhToday ?: return null
+    val mese = item.state.kwhMonth
+    return if (mese != null && mese > oggi) {
+        stringResource(R.string.state_energy, formatKwh(oggi), formatKwh(mese))
+    } else {
+        stringResource(R.string.state_energy_today, formatKwh(oggi))
+    }
+}
+
+/** Sotto i dieci kWh due decimali, sopra uno: un boiler non fa 47,83 kWh, fa 47,8. */
+private fun formatKwh(kwh: Double): String =
+    String.format(Locale.getDefault(), if (kwh < 10) "%.2f" else "%.1f", kwh)
+
+/**
+ * Sotto i dieci watt il decimale conta: fra 0,0 e 3,0 W passa la differenza fra
+ * un elettrodomestico spento davvero e uno in attesa, ed e proprio quella che si
+ * va a guardare. Sopra, sarebbe una cifra che balla a ogni lettura.
+ */
+private fun formatWatts(watts: Double): String =
+    String.format(Locale.getDefault(), if (watts < 10) "%.1f" else "%.0f", watts)
 
 /** L'ultimo stato ricevuto, da mostrare come ricordo e non come fatto presente. */
 @Composable

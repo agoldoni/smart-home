@@ -32,6 +32,9 @@
     <string name="device_state_on">Acceso</string>
     <string name="device_state_off">Spento</string>
     <string name="state_level">Livello %1$d%%</string>
+    <string name="state_power">%1$s W</string>
+    <string name="state_energy">%1$s kWh oggi · %2$s questo mese</string>
+    <string name="state_energy_today">%1$s kWh oggi</string>
     <string name="state_unreachable">Non raggiungibile</string>
     <string name="state_unreachable_last">Non raggiungibile · ultimo: %1$s</string>
 
@@ -41,6 +44,7 @@
     <string name="section_identity">Identità</string>
     <string name="section_state">Stato</string>
     <string name="section_availability">Disponibilità</string>
+    <string name="section_energy">Consumi</string>
     <string name="section_command">Comando</string>
     <string name="section_level">Livello</string>
     <string name="section_advanced">Avanzate</string>
@@ -53,6 +57,10 @@
     <string name="field_payload_on">Payload acceso</string>
     <string name="field_payload_off">Payload spento</string>
     <string name="field_state_json_key">Campo JSON dello stato</string>
+    <string name="field_power_json_key">Campo JSON della potenza</string>
+    <string name="field_energy_topic">Topic dei consumi</string>
+    <string name="field_energy_today_json_key">kWh di oggi</string>
+    <string name="field_energy_month_json_key">kWh del mese</string>
     <string name="field_availability_topic">Topic di disponibilità</string>
     <string name="field_payload_available">Payload raggiungibile</string>
     <string name="field_payload_unavailable">Payload non raggiungibile</string>
@@ -66,6 +74,8 @@
     <string name="helper_state_topic">Dove il dispositivo pubblica il proprio stato. Ammette le wildcard + e #.</string>
     <string name="helper_command_topic">Dove l\'app pubblica i comandi. Niente wildcard.</string>
     <string name="helper_state_json_key">Lascia vuoto se il payload è già il valore. Per Tasmota: POWER.</string>
+    <string name="helper_power_json_key">Il campo con i watt assorbiti, per chi li misura: la scheda li mostra accanto allo stato. Per le prese del ponte Tuya: potenza_w.</string>
+    <string name="helper_energy_topic">Dove qualcuno pubblica i consumi accumulati di questo dispositivo. Vuoto se nessuno li tiene: la scheda non mostrerà nessun kWh. Per le prese del ponte Tuya: casa/&lt;nome&gt;/energia, con i campi kwh_oggi e kwh_mese.</string>
     <string name="helper_availability_topic">Dove si dichiara se il dispositivo è vivo. Vuoto se non ne pubblica uno: l\'app mostrerà comunque l\'ultimo stato ricevuto, senza sapere se è ancora vero.</string>
     <string name="helper_level_state_topic">Vuoto se il livello arriva sullo stesso topic dello stato.</string>
     <string name="helper_level_max">A cosa corrisponde il 100%: 100 per Tasmota, 254 per Zigbee2MQTT.</string>

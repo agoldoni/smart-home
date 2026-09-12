@@ -5,7 +5,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [DeviceEntity::class], version = 2, exportSchema = true)
+@Database(entities = [DeviceEntity::class], version = 4, exportSchema = true)
 abstract class SmartHomeDatabase : RoomDatabase() {
     abstract fun deviceDao(): DeviceDao
 }
@@ -24,5 +24,33 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
         db.execSQL("ALTER TABLE devices ADD COLUMN availabilityTopic TEXT")
         db.execSQL("ALTER TABLE devices ADD COLUMN payloadAvailable TEXT NOT NULL DEFAULT 'online'")
         db.execSQL("ALTER TABLE devices ADD COLUMN payloadUnavailable TEXT NOT NULL DEFAULT 'offline'")
+    }
+}
+
+/**
+ * Aggiunge il campo JSON della potenza istantanea.
+ *
+ * Resta nulla per i dispositivi gia registrati, e va bene cosi: nulla vuol dire
+ * "di questo non si sa se pubblichi i watt", che e esattamente quello che l'app
+ * sapeva di loro fino a un istante fa. Il numero compare quando qualcuno scrive
+ * da quale campo leggerlo.
+ */
+val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE devices ADD COLUMN powerJsonKey TEXT")
+    }
+}
+
+/**
+ * Aggiunge il topic dei consumi accumulati e i due campi da leggerci dentro.
+ *
+ * Tre colonne nulle, come sempre: nullo vuol dire "di questo dispositivo non
+ * conta nessuno", che e la verita per ogni dispositivo registrato finora.
+ */
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE devices ADD COLUMN energyTopic TEXT")
+        db.execSQL("ALTER TABLE devices ADD COLUMN energyTodayJsonKey TEXT")
+        db.execSQL("ALTER TABLE devices ADD COLUMN energyMonthJsonKey TEXT")
     }
 }
