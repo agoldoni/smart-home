@@ -28,7 +28,7 @@ consumi e stato. I nomi vengono dall'account Tuya:
 | `depuratore` | 3.3 | 192.168.86.104 |
 | `lavastoviglie` | 3.3 | 192.168.86.110 |
 | `lavatrice-nuova` | 3.3 | 192.168.86.113 |
-| `pompa` | 3.3 | 192.168.86.115 |
+| `pompa` | 3.3 | 192.168.86.108 |
 | `jacopo-studio` | 3.4 | 192.168.86.102 |
 | `frigorifero` | 3.4 | 192.168.86.107 |
 
@@ -238,7 +238,7 @@ docker compose exec broker mosquitto_sub -h localhost -t 'casa/#' -v \
   presa fuori portata perde il 100% dei pacchetti e smette di annunciarsi in broadcast,
   mentre le altre si annunciano ogni cinque secondi: `python3 ascolta.py` conta gli annunci
   ed è la prova più rapida.
-  La `pompa` era esattamente in quel caso, e spostarla ha risolto. Il ponte comunque ci
+  Una delle prese era esattamente in quel caso, e spostarla ha risolto. Il ponte comunque ci
   convive: un comando arrivato mentre il collegamento
   cadeva non viene buttato, resta in attesa e riparte dopo la riconnessione, e solo dopo
   `validita_comando` secondi lo si lascia cadere dicendolo nei log. Senza questo l'app
