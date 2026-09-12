@@ -11,3 +11,10 @@ chiavi/
 # Password del broker e chiavi WireGuard: generati, mai versionati
 mosquitto/config/passwd
 wireguard/
+
+# Persistenza del broker: si riscrive da sola a ogni avvio, nei diff e' solo
+# rumore. La cartella pero' resta versionata: il bind mount di compose la vuole
+# gia' li' e dell'utente giusto, perche' creata da Docker sarebbe di root e
+# mosquitto, che gira come uid 1000, non ci scriverebbe.
+mosquitto/data/*
+!mosquitto/data/.gitkeep
