@@ -1,0 +1,111 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 1,
+    "identityHash": "bafdb51655a2bc9316892c41f17688db",
+    "entities": [
+      {
+        "tableName": "devices",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `room` TEXT NOT NULL, `kind` TEXT NOT NULL, `stateTopic` TEXT NOT NULL, `commandTopic` TEXT NOT NULL, `payloadOn` TEXT NOT NULL, `payloadOff` TEXT NOT NULL, `stateJsonKey` TEXT, `levelStateTopic` TEXT, `levelCommandTopic` TEXT, `levelJsonKey` TEXT, `levelMax` INTEGER NOT NULL, `qos` INTEGER NOT NULL, `retained` INTEGER NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "room",
+            "columnName": "room",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kind",
+            "columnName": "kind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "stateTopic",
+            "columnName": "stateTopic",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "commandTopic",
+            "columnName": "commandTopic",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "payloadOn",
+            "columnName": "payloadOn",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "payloadOff",
+            "columnName": "payloadOff",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "stateJsonKey",
+            "columnName": "stateJsonKey",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "levelStateTopic",
+            "columnName": "levelStateTopic",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "levelCommandTopic",
+            "columnName": "levelCommandTopic",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "levelJsonKey",
+            "columnName": "levelJsonKey",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "levelMax",
+            "columnName": "levelMax",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "qos",
+            "columnName": "qos",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "retained",
+            "columnName": "retained",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'bafdb51655a2bc9316892c41f17688db')"
+    ]
+  }
+}

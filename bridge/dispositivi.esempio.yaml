@@ -1,0 +1,97 @@
+# Le sei prese trovate in rete il 12/09/2026 con l'ascolto degli annunci Tuya.
+#
+# Copia questo file in dispositivi.yaml e riempi le chiavi locali: senza quelle
+# le prese ignorano qualunque comando. Vedi README, "Estrarre le chiavi locali".
+#
+# Il campo "ip" e' solo un suggerimento per il primo avvio: il ponte ascolta gli
+# annunci in broadcast e segue il dispositivo se il DHCP lo sposta.
+#
+# Il "nome" finisce nei topic, quindi niente spazi ne' accenti: e' anche il nome
+# con cui vedrai la presa nell'app, quindi conviene cambiarlo in qualcosa di
+# vero (presa-lavatrice, presa-scrivania, ...) appena capisci quale e' quale.
+
+mqtt:
+  prefisso: casa
+  qos: 1
+
+tuya:
+  intervallo_polling: 2          # secondi fra una lettura e la successiva
+  timeout_socket: 4
+  tentativi_prima_di_offline: 3
+  # Uno solo: i tentativi che contano sono i tre del ciclo esterno, e qui si
+  # moltiplicavano fra loro. Con tre ritrasmissioni una lettura a vuoto costa
+  # 19,2 secondi misurati contro questa presa, con una sola 2,3 — ed e' il tempo
+  # che l'app aspetta prima di sapere che qualcosa e' cambiato.
+  tentativi_socket: 1            # ritrasmissioni sul singolo scambio
+  validita_comando: 30           # dopo tanti secondi un comando non passato si abbandona
+  soglia_lettura_lenta: 3        # oltre tanti secondi la lettura finisce nel log
+
+  # Tutte e sette misurano i consumi e usano gli stessi dp. Valgono per ogni
+  # dispositivo che non abbia un suo blocco "letture".
+  letture_predefinite:
+    corrente_ma: {dp: 18, scala: 1}
+    potenza_w:   {dp: 19, scala: 10}
+    tensione_v:  {dp: 20, scala: 10}
+
+dispositivi:
+
+  # --- primo modello: quattro pezzi, protocollo 3.3 -----------------------
+
+  - nome: boiler
+    id: bfb8f3df8fa3bd6da2sjgl
+    chiave: ""
+    versione: "3.3"
+    ip: 192.168.86.101
+
+  - nome: depuratore
+    id: bfc70b37717ea364d5tgnh
+    chiave: ""
+    versione: "3.3"
+    ip: 192.168.86.104
+
+  - nome: lavastoviglie
+    id: bf1e27fffb77b840b8cygv
+    chiave: ""
+    versione: "3.3"
+    ip: 192.168.86.110
+
+  - nome: lavatrice-nuova
+    id: bfc1b51eb0f744fe81pspj
+    chiave: ""
+    versione: "3.3"
+    ip: 192.168.86.113
+
+  # --- secondo modello: due pezzi, protocollo 3.4 -------------------------
+
+  - nome: jacopo-studio
+    id: bf8170f769bb7c611cgmmf
+    chiave: ""
+    versione: "3.4"
+    ip: 192.168.86.102
+
+  - nome: frigorifero
+    id: bfb86e02f4ae3b9faeptam
+    chiave: ""
+    versione: "3.4"
+    ip: 192.168.86.107
+
+  # Questo si annuncia piu' di rado degli altri: lo ha trovato il ponte al
+  # primo avvio, non la scansione iniziale.
+  - nome: pompa
+    id: bf4f34bcb52162cd7aukex
+    chiave: ""
+    versione: "3.3"
+    ip: 192.168.86.115
+
+# Se una presa misura i consumi, i valori stanno in altri dp e si possono
+# promuovere a campi leggibili dello stato. I numeri cambiano da modello a
+# modello: guarda cosa compare in "dps" nel topic di stato e poi mappa.
+#
+#  - nome: presa-lavatrice
+#    id: ...
+#    chiave: ...
+#    versione: "3.3"
+#    letture:
+#      potenza_w:   {dp: 19, scala: 10}
+#      tensione_v:  {dp: 20, scala: 10}
+#      corrente_ma: {dp: 18, scala: 1}

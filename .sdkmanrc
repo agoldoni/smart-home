@@ -1,0 +1,4 @@
+# JDK del progetto, gestita con SDKMAN (sdk env).
+# JDK 21: la JDK di sistema (25) non e supportata dal daemon di Gradle 8.14,
+# mentre il progetto compila con JVM 17 (vedi compileOptions in app/build.gradle.kts).
+java=21.0.6-tem

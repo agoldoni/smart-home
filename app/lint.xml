@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<lint>
+    <!-- Lint suggerisce di togliere il qualificatore v26 perche minSdk e gia 26.
+         Seguirlo rompe la build: senza versione, `mipmap-anydpi` viene ignorato
+         in silenzio dal merger delle risorse e l'icona non esiste piu. -->
+    <issue id="ObsoleteSdkInt">
+        <ignore path="src/main/res/mipmap-anydpi-v26" />
+    </issue>
+</lint>

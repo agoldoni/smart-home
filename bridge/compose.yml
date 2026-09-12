@@ -1,0 +1,73 @@
+name: smart-home
+
+services:
+
+  broker:
+    image: eclipse-mosquitto:2
+    container_name: sh-broker
+    restart: unless-stopped
+    # Da root mosquitto scende a uid 1883 e non leggerebbe piu' il file di
+    # password, che appartiene all'utente host. Girando gia' come lui, legge.
+    user: "${PUID:-1000}:${PGID:-1000}"
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto/config/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./mosquitto/config/passwd:/mosquitto/config/passwd:ro
+      - ./mosquitto/data:/mosquitto/data
+    healthcheck:
+      test: ["CMD", "mosquitto_sub", "-h", "localhost", "-t", "$$SYS/broker/uptime", "-C", "1", "-W", "3", "-u", "${MQTT_USER}", "-P", "${MQTT_PASS}"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  ponte:
+    build: ./tuya-mqtt
+    image: smart-home/tuya-mqtt:latest
+    container_name: sh-ponte
+    restart: unless-stopped
+    # Rete host: i Tuya si annunciano in broadcast UDP su 6666/6667 e un
+    # container in bridge non li vedrebbe mai.
+    network_mode: host
+    environment:
+      TZ: Europe/Rome
+      MQTT_HOST: 127.0.0.1
+      MQTT_PORT: "1883"
+      MQTT_USER: ${MQTT_USER}
+      MQTT_PASS: ${MQTT_PASS}
+      LIVELLO_LOG: ${LIVELLO_LOG:-INFO}
+    volumes:
+      - ./dispositivi.yaml:/app/dispositivi.yaml:ro
+    depends_on:
+      broker:
+        condition: service_healthy
+
+  # Avvio opzionale:  docker compose --profile vpn up -d
+  wireguard:
+    image: lscr.io/linuxserver/wireguard:latest
+    container_name: sh-wireguard
+    profiles: ["vpn"]
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      TZ: Europe/Rome
+      SERVERURL: ${WG_SERVERURL}
+      SERVERPORT: ${WG_PORT:-51820}
+      PEERS: ${WG_PEERS:-telefono}
+      PEERDNS: "192.168.86.1"
+      # Split tunnel: nel tunnel finisce solo la LAN di casa, non tutto il
+      # traffico del telefono.
+      ALLOWEDIPS: "192.168.86.0/24"
+      INTERNAL_SUBNET: "10.13.13.0"
+    ports:
+      - "${WG_PORT:-51820}:51820/udp"
+    volumes:
+      - ./wireguard:/config
+      - /lib/modules:/lib/modules:ro
+    sysctls:
+      - net.ipv4.conf.all.src_valid_mark=1

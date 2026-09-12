@@ -1,0 +1,292 @@
+# Ponte Tuya → MQTT
+
+Le prese comprate con Smart Life parlano già in locale: ascoltano sulla porta 6668 e si
+annunciano da sole in broadcast UDP. Quello che manca per fare a meno del cloud è la
+**chiave locale** di ciascuna, che Tuya tiene per sé.
+
+Questo stack fa tre cose: si procura le chiavi una volta sola, traduce il protocollo Tuya
+in topic MQTT, e apre una porta di casa per il telefono quando è fuori. L'app Android del
+progetto non viene toccata: dopo il ponte le prese sono indistinguibili da un Tasmota o da
+uno Zigbee2MQTT, che è il caso che il suo `DeviceDriver` già copre.
+
+```
+  fuori casa                      casa
+┌──────────────┐          ┌────────────────────────┐
+│ app Android  │ WireGuard│  broker mosquitto      │        LAN
+│  parla MQTT  ├──────────┤  ponte tinytuya ⇄ MQTT ├──► 7 prese Tuya :6668
+└──────────────┘  :51820  └────────────────────────┘
+```
+
+## Stato
+
+Broker e ponte funzionano e tutte e sette le prese rispondono in locale, con chiave,
+consumi e stato. I nomi vengono dall'account Tuya:
+
+| nome | protocollo | dove |
+|---|---|---|
+| `boiler` | 3.3 | 192.168.86.101 |
+| `depuratore` | 3.3 | 192.168.86.104 |
+| `lavastoviglie` | 3.3 | 192.168.86.110 |
+| `lavatrice-nuova` | 3.3 | 192.168.86.113 |
+| `pompa` | 3.3 | 192.168.86.115 |
+| `jacopo-studio` | 3.4 | 192.168.86.102 |
+| `frigorifero` | 3.4 | 192.168.86.107 |
+
+Gli indirizzi sono indicativi: il ponte segue le prese per id, non per IP.
+
+Finché lo stack sta su questo PC, che si spegne ogni sera, il controllo da remoto vale
+solo a PC acceso. È il motivo per cui prima o poi va su qualcosa di sempre acceso — vedi
+in fondo, è un `scp` e un `docker compose up`.
+
+## Avvio
+
+```bash
+cp .env.example .env          # e cambia MQTT_PASS
+bash crea-password-mqtt.sh    # scrive mosquitto/config/passwd
+docker compose up -d          # broker + ponte
+docker compose logs -f ponte
+```
+
+Con la VPN:
+
+```bash
+docker compose --profile vpn up -d
+```
+
+## Estrarre le chiavi locali
+
+Le chiavi stanno nel cloud Tuya e si tirano giù una volta sola, con un account developer
+gratuito collegato a quello di Smart Life. È il passo più noioso di tutti ed è anche
+l'unico che dipende da Tuya: dopo, il cloud non serve mai più.
+
+1. Registrati su [iot.tuya.com](https://iot.tuya.com) e crea un **Cloud Project** di tipo
+   *Smart Home*, data center **Central Europe**. Segnati `Access ID` e `Access Secret`.
+2. Nel progetto, scheda **Devices → Link Tuya App Account**, aggiungi l'account inquadrando
+   il QR con l'app Smart Life (*Io → icona in alto a destra → Scansiona*). Le sette prese
+   compaiono nell'elenco.
+3. Scheda **Service API**: verifica che il progetto abbia `IoT Core` e
+   `Authorization Token Management`. Senza il primo il wizard scarica un elenco vuoto.
+4. Da qui:
+
+   ```bash
+   bash estrai-chiavi.sh     # chiede ID, Secret, regione (eu) e un device id qualsiasi
+   python3 applica-chiavi.py # travasa le chiavi in dispositivi.yaml
+   docker compose restart ponte
+   ```
+
+Il device id da dare al wizard è uno qualunque di quelli in `dispositivi.yaml`: serve solo
+a capire in che data center cercare.
+
+Le chiavi restano in `chiavi/` e in `dispositivi.yaml`, entrambi fuori da git. **La chiave
+cambia se riassoci la presa con Smart Life**: in quel caso si rifà il giro per quella.
+
+Tre cose che vale la pena sapere prima:
+
+- **Il wizard ha bisogno delle porte di scoperta.** `estrai-chiavi.sh` ferma il ponte per la
+  durata della procedura e lo riavvia da solo. Senza, l'ultimo passo muore con
+  `Address already in use` — dopo aver comunque salvato le chiavi, quindi è un incidente
+  senza conseguenze, ma si perde la verifica finale.
+- **Il wizard scarica tutto l'account**, non solo le prese di casa: `applica-chiavi.py`
+  prende solo quelle elencate in `dispositivi.yaml` e ignora il resto.
+- **Il trial di IoT Core dura un mese**, rinnovabile. Scaduto non rompe niente di quello
+  che gira: le chiavi sono già qui. Servirebbe di nuovo solo per una presa riassociata.
+
+## I topic
+
+Un dispositivo di nome `boiler` occupa:
+
+| topic | chi scrive | contenuto |
+|---|---|---|
+| `casa/boiler/stato` | il ponte | JSON ritenuto, campo `stato` = `ON`/`OFF` |
+| `casa/boiler/comando` | l'app | `ON`, `OFF` oppure `TOGGLE` |
+| `casa/boiler/disponibilita` | il ponte | `online` / `offline`, ritenuto |
+| `casa/boiler/dps/comando` | a mano | JSON grezzo, es. `{"1": true}` |
+
+e il ponte nel suo insieme tiene `casa/ponte/stato`, con `offline` lasciato come testamento
+al broker.
+
+Lo stato completo è così:
+
+```json
+{"stato":"ON","ip":"192.168.86.107","versione":"3.4","corrente_ma":1006,"potenza_w":233.4,
+ "tensione_v":229.9,"dps":{"1":true,"17":30,"18":1006,"19":2334,"20":2299,"38":"on"}}
+```
+
+Tutte e sette misurano i consumi, e i tre dp che contano sono gli stessi per entrambi i
+modelli: 18 la corrente in mA, 19 la potenza in decimi di W, 20 la tensione in decimi di V.
+La mappatura sta una volta sola in `letture_predefinite`, non ripetuta per dispositivo.
+Torna anche dalla fisica: 229,9 V per 1,006 A fanno i 233,4 W che il frigorifero dichiara.
+
+`dps` resta lì accanto, riportato senza interpretarlo: è quello che la presa dice davvero.
+Il dp 17 sembra un contatore di energia cumulata ma l'unità non è confermata, quindi non è
+promosso a campo leggibile: meglio un numero grezzo che un'etichetta sbagliata.
+
+Gli aggiornamenti parziali — la presa che manda solo il dp appena cambiato — vengono fusi
+con quello che il ponte sa già, e uno stato senza il dp dell'interruttore non viene
+pubblicato affatto. Senza questa cura una presa accesa comparirebbe spenta ogni volta che
+la tensione oscilla, che è il genere di supposizione che su un interruttore si paga.
+
+## Registrare le prese nell'app
+
+Per ciascuna, nel modulo *Aggiungi*:
+
+| campo | valore |
+|---|---|
+| Tipo | Interruttore |
+| Topic di stato | `casa/boiler/stato` |
+| Campo JSON dello stato | `stato` |
+| Topic di comando | `casa/boiler/comando` |
+| Payload acceso / spento | `ON` / `OFF` |
+| Comandi ritenuti | no |
+
+Nelle impostazioni del broker vanno indirizzo, porta 1883 e le credenziali di `.env`.
+Sull'indirizzo vedi la sezione qui sotto: ce n'è uno solo che va bene sia dentro che fuori
+casa.
+
+## Da fuori: WireGuard
+
+La catena di casa è a doppio NAT e va bucata a due livelli:
+
+```
+Internet ──► ZTE H2640W        192.168.1.1     agoldoni.duckdns.org
+               └──► Google Wifi  WAN 192.168.1.101 / LAN 192.168.86.1
+                       └──► questo PC 192.168.86.45
+```
+
+1. **Sullo ZTE** (`http://192.168.1.1`): inoltra **UDP 51820 → 192.168.1.101**, e riserva
+   quell'indirizzo al Google Wifi, altrimenti al primo riavvio la regola punta al vuoto.
+2. **Sul Google Wifi** (app Google Home, *Impostazioni → Rete → Avanzate → Port
+   forwarding*): inoltra **UDP 51820 → 192.168.86.45**, e riserva anche questo in DHCP.
+3. `docker compose --profile vpn up -d`, poi il QR per il telefono:
+
+   ```bash
+   docker compose exec wireguard /app/show-peer telefono
+   ```
+
+Il peer nasce con `AllowedIPs = 192.168.86.0/24`: nel tunnel passa solo la LAN di casa, il
+resto del traffico del telefono esce normalmente. Il vantaggio è che l'app può puntare
+**sempre a `192.168.86.45`**, dentro e fuori casa, e il campo broker non si tocca mai.
+
+Il peer riceve anche `DNS = 192.168.86.1`, che sta dentro la rete instradata: col tunnel
+attivo i nomi li risolve il router di casa, e da fuori funzionano anche i `.lan`. Il rovescio
+è che se la linea di casa cade mentre il tunnel è su, il telefono resta senza risoluzione
+dei nomi finché non lo spegni. L'app non ne soffre, perché al broker ci va per indirizzo.
+
+**In casa il tunnel funziona lo stesso.** L'endpoint è il nome DDNS, cioè l'IP pubblico, e
+di solito rientrare da dentro la propria rete richiede l'hairpin NAT, che molti router
+domestici non fanno. Questo ZTE lo fa: verificato, tunnel agganciato dal Wi-Fi di casa con
+handshake regolare. Si può quindi lasciare WireGuard sempre attivo e non pensarci più.
+
+Il prezzo è un giro a vuoto — il pacchetto esce fino allo ZTE e rientra — per raggiungere
+una macchina che sta a due metri. Se dà fastidio, l'app WireGuard di Android sa disattivarsi
+da sola sulla rete Wi-Fi di casa: in quel caso l'app punta comunque a `192.168.86.45`, che
+in LAN si raggiunge diretta. In un modo o nell'altro l'indirizzo del broker non cambia mai,
+ed è tutto il punto di questa scelta.
+
+Il DDNS `agoldoni.duckdns.org` punta già all'IP giusto. Assicurati che qualcosa continui ad
+aggiornarlo quando Vodafone cambia indirizzo: se non c'è già un aggiornatore da qualche
+parte, il posto naturale è questo stack.
+
+## Spostarlo su un dispositivo sempre acceso
+
+Niente di speciale — è la ragione per cui è tutto in Docker:
+
+```bash
+rsync -a --exclude wireguard/ --exclude mosquitto/data/ bridge/ pi@casa:~/bridge/
+ssh pi@casa 'cd bridge && bash crea-password-mqtt.sh && docker compose up -d'
+```
+
+Poi si sposta l'inoltro del Google Wifi sul nuovo indirizzo e si cambia il broker nell'app.
+Il ponte deve restare in `network_mode: host` e sulla stessa LAN delle prese: gli annunci
+in broadcast non attraversano né un bridge Docker né un router.
+
+## Test
+
+```bash
+docker run --rm -v "$PWD/tuya-mqtt:/app:ro" -w /app smart-home/tuya-mqtt:latest \
+  python -m unittest test_bridge -v
+```
+
+Coprono la parte che sbagliata non produce nessun errore: i comandi. **Per un
+interruttore i comandi non fanno coda.** Se la presa e' irraggiungibile e qualcuno tocca
+l'interruttore cinque volte, una coda glieli applicherebbe tutti alla riconnessione, uno
+ogni intervallo di polling, e il relay commuterebbe cinque volte inseguendo comandi ormai
+vecchi. Di una fila di accensioni e spegnimenti conta solo l'ultima, quindi c'e' una sola
+casella e la richiesta nuova sostituisce quella che non e' ancora passata.
+
+Il caso sottile, che ha un test tutto suo: mentre il ciclo sta provando ad applicare una
+richiesta, ne arriva una piu' recente. Quando la vecchia finalmente passa non deve
+cancellare la nuova — per questo `_consuma` confronta l'identita' e non svuota e basta.
+
+Non e' verificabile contro una presa vera: servirebbe renderla irraggiungibile a comando.
+Una raffica su una presa che risponde non prova niente, perche' il ponte fa in tempo a
+consumare ogni comando prima che arrivi il successivo, e li applica tutti — che e' il
+comportamento giusto quando la presa e' raggiungibile.
+
+## Quando qualcosa non va
+
+```bash
+docker compose logs -f ponte                     # cosa vede il ponte
+docker compose exec broker mosquitto_sub -h localhost -t 'casa/#' -v \
+  -u casa -P "$(grep MQTT_PASS .env | cut -d= -f2)"
+```
+
+- **`manca la chiave locale`** — non hai ancora fatto la sezione delle chiavi.
+- **una presa che va e viene** — è segnale Wi-Fi, non software. Il sintomo che conta non è
+  la latenza: queste prese rispondono al ping fra i 40 e i 125 ms *tutte*, perché sono ESP
+  con risparmio energetico e dormono fra un beacon e l'altro. Il sintomo è sparire. Una
+  presa fuori portata perde il 100% dei pacchetti e smette di annunciarsi in broadcast,
+  mentre le altre si annunciano ogni cinque secondi: `python3 ascolta.py` conta gli annunci
+  ed è la prova più rapida.
+  La `pompa` era esattamente in quel caso, e spostarla ha risolto. Il ponte comunque ci
+  convive: un comando arrivato mentre il collegamento
+  cadeva non viene buttato, resta in attesa e riparte dopo la riconnessione, e solo dopo
+  `validita_comando` secondi lo si lascia cadere dicendolo nei log. Senza questo l'app
+  resterebbe su "comando inviato" senza che nessuno spieghi perché.
+- **l'app ci mette un'eternità ad accorgersi di un cambio fatto a mano sulla presa** — è
+  il ciclo di lettura, non l'app. Le prese non avvisano nessuno: è il ponte che chiede, e
+  ogni lettura finisce nel log come `lettura in 0.0s`. Oltre `soglia_lettura_lenta`
+  secondi (3 di serie) la riga diventa un WARNING e si vede anche a log normale; per
+  vederle tutte serve `LIVELLO_LOG=DEBUG`. Il 12/09/2026 fra la pressione del pulsante e
+  la pubblicazione MQTT passavano **79 secondi**, e il log non diceva niente:
+  `tentativi_socket` era 3, una lettura a vuoto costava 19,2 secondi misurati, e il
+  contatore dei fallimenti si azzerava a ogni successo senza mai arrivare ai tre di fila
+  che avrebbero fatto scattare un avviso. Con `tentativi_socket: 1` e
+  `intervallo_polling: 2` la stessa misura, rifatta con lo stesso metodo, dà **un
+  secondo**. Ed è per questo che la lettura si cronometra: senza, un ciclo lento non
+  lascia traccia.
+- **una scheda che non si aggiorna, e non si capisce se il messaggio non arriva o se
+  l'app non lo ha mai chiesto** — scommenta `log_type subscribe` in
+  `mosquitto/config/mosquitto.conf`, riavvia il broker e guarda: una riga per
+  sottoscrizione, `<client id> <qos> <topic>`. È l'unico modo di vedere da fuori cosa
+  ogni app sta davvero ascoltando, e chiude la questione in un colpo solo. Il 12/09/2026
+  ha inchiodato una presa rimasta "accesa": l'app si iscriveva a `casa/pompa/stato` e a
+  nient'altro, perché nella sua registrazione il topic di disponibilità era vuoto.
+- **una presa sempre `offline`** — chiave sbagliata (spesso è quella di un altro
+  dispositivo), oppure qualcun altro tiene occupata l'unica connessione che le prese 3.3
+  accettano: l'app Smart Life aperta in primo piano, o uno script tinytuya lanciato a mano
+  mentre il ponte gira. Chiudi l'una o ferma l'altro — `docker compose stop ponte` — e
+  riprova.
+- **il ponte non scopre niente** — sei finito in `network_mode: bridge`, o c'è un altro
+  processo sulle porte UDP 6666/6667.
+- **`Connection Refused: not authorised`** — `mosquitto/config/passwd` non combacia con
+  `.env`: rilancia `crea-password-mqtt.sh` e riavvia il broker.
+
+## Le prese offline nell'app
+
+Quando una presa smette di rispondere il ponte pubblica `disponibilita: offline`, e l'app
+lo legge: la scheda diventa "non raggiungibile · ultimo: acceso", con l'ultimo stato
+presentato come ricordo invece che come fatto presente. Nel modulo di registrazione va
+indicato il **topic di disponibilità**, `casa/<nome>/disponibilita`; i due payload restano
+`online` e `offline`, che sono già i valori predefiniti.
+
+Vale la pena compilarlo. Senza, una presa staccata resta accesa sulla griglia con la stessa
+sicurezza di una viva, e un comando mandato mentre era via lascia la scheda su "comando
+inviato" a tempo indeterminato.
+
+## Dopo, se ne vale la pena
+
+`tuya-cloudcutter` riflasha le prese con OpenBeken via OTA, senza saldatore, se il modello
+è nel suo elenco. A quel punto parlano MQTT da sole, il ponte per quelle sparisce e il
+cloud Tuya non le vede più. Stessi topic, app ancora invariata. Ma è irreversibile e può
+brickare: prima si fa funzionare tutto di qui, poi eventualmente una presa di prova.

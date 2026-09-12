@@ -1,0 +1,137 @@
+package it.agoldoni.smarthome.driver.mqtt
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import it.agoldoni.smarthome.domain.model.Device
+import it.agoldoni.smarthome.domain.model.DeviceState
+
+/**
+ * Le due funzioni pure del driver. Sono anche le piu facili da sbagliare: un
+ * topic che non combacia si manifesta come un dispositivo perennemente "in
+ * attesa di dati", senza nessun errore visibile.
+ */
+class MqttTopicsTest {
+
+    @Test
+    fun `topic identico combacia`() {
+        assertTrue(MqttTopics.matches("stat/luce/POWER", "stat/luce/POWER"))
+    }
+
+    @Test
+    fun `piu combacia con un livello solo`() {
+        assertTrue(MqttTopics.matches("stat/+/POWER", "stat/luce/POWER"))
+        assertFalse(MqttTopics.matches("stat/+/POWER", "stat/piano/luce/POWER"))
+    }
+
+    @Test
+    fun `cancelletto copre il resto compreso il livello padre`() {
+        assertTrue(MqttTopics.matches("stat/#", "stat/luce/POWER"))
+        assertTrue(MqttTopics.matches("stat/#", "stat"))
+        assertFalse(MqttTopics.matches("stat/#", "tele/luce"))
+    }
+
+    @Test
+    fun `un topic piu corto del filtro non combacia`() {
+        assertFalse(MqttTopics.matches("stat/luce/POWER", "stat/luce"))
+        assertFalse(MqttTopics.matches("stat/luce", "stat/luce/POWER"))
+    }
+}
+
+class ExtractJsonTest {
+
+    @Test
+    fun `legge un campo di primo livello`() {
+        assertEquals("ON", extractJson("""{"POWER":"ON"}""", "POWER"))
+    }
+
+    @Test
+    fun `legge un campo annidato`() {
+        assertEquals("42", extractJson("""{"stato":{"livello":42}}""", "stato.livello"))
+    }
+
+    @Test
+    fun `payload non JSON restituisce null`() {
+        assertNull(extractJson("ON", "POWER"))
+    }
+
+    @Test
+    fun `campo assente restituisce null`() {
+        assertNull(extractJson("""{"POWER":"ON"}""", "DIMMER"))
+        assertNull(extractJson("""{"POWER":"ON"}""", "stato.livello"))
+    }
+}
+
+/**
+ * La disponibilita e la terza cosa facile da sbagliare in silenzio: un payload
+ * letto male non da nessun errore, spegne solo una scheda che invece e viva, o
+ * peggio ne lascia accesa una che non c'e piu.
+ */
+class ReadAvailabilityTest {
+
+    @Test
+    fun `riconosce i due payload attesi`() {
+        assertEquals(true, readAvailability("online", "online", "offline"))
+        assertEquals(false, readAvailability("offline", "online", "offline"))
+    }
+
+    @Test
+    fun `ignora maiuscole e spazi, che Tasmota usa a modo suo`() {
+        assertEquals(true, readAvailability(" Online\n", "online", "offline"))
+        assertEquals(false, readAvailability("OFFLINE", "online", "offline"))
+    }
+
+    @Test
+    fun `legge la forma JSON di Zigbee2MQTT`() {
+        assertEquals(true, readAvailability("""{"state":"online"}""", "online", "offline"))
+        assertEquals(false, readAvailability("""{"state":"offline"}""", "online", "offline"))
+    }
+
+    @Test
+    fun `un payload incomprensibile non significa assente`() {
+        // Il punto di tutta la funzione: davanti a qualcosa che non si capisce
+        // si resta su quel che si sapeva, non si dichiara sparito il dispositivo.
+        assertNull(readAvailability("boh", "online", "offline"))
+        assertNull(readAvailability("", "online", "offline"))
+        assertNull(readAvailability("""{"altro":"online"}""", "online", "offline"))
+    }
+
+    @Test
+    fun `rispetta i payload scelti dall'utente`() {
+        assertEquals(true, readAvailability("1", "1", "0"))
+        assertEquals(false, readAvailability("0", "1", "0"))
+        assertNull(readAvailability("online", "1", "0"))
+    }
+}
+
+/**
+ * Un topic dichiarato ma non sottoscritto e' il modo piu' silenzioso di non
+ * funzionare: nessun errore, solo un dispositivo che non dice mai di esserci.
+ */
+class SubscriptionsTest {
+
+    @Test
+    fun `il topic di disponibilita finisce fra le sottoscrizioni`() {
+        val device = Device(
+            name = "pompa",
+            stateTopic = "casa/pompa/stato",
+            availabilityTopic = "casa/pompa/disponibilita",
+        )
+        assertTrue(device.subscriptions.contains("casa/pompa/disponibilita"))
+    }
+
+    @Test
+    fun `senza topic di disponibilita non si sottoscrive niente in piu`() {
+        val device = Device(name = "pompa", stateTopic = "casa/pompa/stato")
+        assertEquals(listOf("casa/pompa/stato"), device.subscriptions)
+    }
+
+    @Test
+    fun `non conoscere la raggiungibilita non significa irraggiungibile`() {
+        assertFalse(DeviceState().unreachable)
+        assertFalse(DeviceState(reachable = true).unreachable)
+        assertTrue(DeviceState(reachable = false).unreachable)
+    }
+}

@@ -1,0 +1,13 @@
+# Contiene le chiavi locali delle prese
+dispositivi.yaml
+
+# Scaricate dal cloud: apiSecret del progetto Tuya, chiavi locali di tutti i
+# dispositivi dell'account, MAC, seriali e coordinate di casa.
+chiavi/
+
+# Credenziali del broker
+.env
+
+# Password del broker e chiavi WireGuard: generati, mai versionati
+mosquitto/config/passwd
+wireguard/

@@ -1,0 +1,54 @@
+[versions]
+# Tetto di questo set: il passo successivo di AndroidX (Compose 1.12, navigation
+# 2.10, lifecycle 2.11, core-ktx 1.19) pretende compileSdk 37 e AGP 9.1+, che
+# qui non ci sono. Salire richiede prima di installare la platform 37 e migrare
+# ad AGP 9 — non basta alzare un numero.
+agp = "8.13.2"
+kotlin = "2.3.21"
+ksp = "2.3.11"
+coreKtx = "1.18.0"
+activityCompose = "1.13.0"
+composeBom = "2026.06.01"
+lifecycle = "2.10.0"
+navigation = "2.9.8"
+room = "2.8.5"
+datastore = "1.2.1"
+coroutines = "1.11.0"
+# Client MQTT puro Java: la variante "android.service" di Paho e abbandonata da
+# anni e non funziona sulle Android recenti, mentre questa resta manutenibile e
+# si lascia avvolgere nelle coroutine senza intermediari.
+paho = "1.2.5"
+junit = "4.13.2"
+# Implementazione vera di org.json: nei test JVM la android.jar ne offre solo
+# uno stub che solleva "not mocked" a ogni chiamata.
+json = "20260814"
+
+[libraries]
+androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
+androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
+compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
+compose-ui = { group = "androidx.compose.ui", name = "ui" }
+compose-ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics" }
+compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
+compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
+compose-material3 = { group = "androidx.compose.material3", name = "material3" }
+compose-material-icons-core = { group = "androidx.compose.material", name = "material-icons-core" }
+androidx-lifecycle-runtime-compose = { group = "androidx.lifecycle", name = "lifecycle-runtime-compose", version.ref = "lifecycle" }
+androidx-lifecycle-viewmodel-compose = { group = "androidx.lifecycle", name = "lifecycle-viewmodel-compose", version.ref = "lifecycle" }
+androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigation" }
+androidx-room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
+androidx-room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
+androidx-room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
+androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastore" }
+kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
+paho-mqtt-client = { group = "org.eclipse.paho", name = "org.eclipse.paho.client.mqttv3", version.ref = "paho" }
+
+junit = { group = "junit", name = "junit", version.ref = "junit" }
+kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutines" }
+json = { group = "org.json", name = "json", version.ref = "json" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }

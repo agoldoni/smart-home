@@ -1,0 +1,177 @@
+package it.agoldoni.smarthome.ui.devices
+
+import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import it.agoldoni.smarthome.data.DeviceRepository
+import it.agoldoni.smarthome.domain.model.Device
+import it.agoldoni.smarthome.domain.model.DeviceKind
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+
+const val ARG_DEVICE_ID = "deviceId"
+const val NEW_DEVICE_ID = 0L
+
+/** Lo stesso dispositivo, in forma modificabile: tutti i campi sono testo. */
+data class DeviceForm(
+    val name: String = "",
+    val room: String = "",
+    val kind: DeviceKind = DeviceKind.SWITCH,
+    val stateTopic: String = "",
+    val commandTopic: String = "",
+    val payloadOn: String = "ON",
+    val payloadOff: String = "OFF",
+    val stateJsonKey: String = "",
+    val availabilityTopic: String = "",
+    val payloadAvailable: String = "online",
+    val payloadUnavailable: String = "offline",
+    val levelStateTopic: String = "",
+    val levelCommandTopic: String = "",
+    val levelJsonKey: String = "",
+    val levelMaxText: String = "100",
+    val qos: Int = 0,
+    val retained: Boolean = false,
+)
+
+data class DeviceEditUiState(
+    val form: DeviceForm = DeviceForm(),
+    val isNew: Boolean = true,
+    val loading: Boolean = true,
+    val nameError: String? = null,
+    val stateTopicError: String? = null,
+    val commandTopicError: String? = null,
+    val levelCommandTopicError: String? = null,
+    /** Salvataggio o cancellazione conclusi: la schermata si chiude. */
+    val closed: Boolean = false,
+)
+
+class DeviceEditViewModel(
+    savedStateHandle: SavedStateHandle,
+    private val repository: DeviceRepository,
+) : ViewModel() {
+
+    private val deviceId: Long = savedStateHandle.get<String>(ARG_DEVICE_ID)?.toLongOrNull() ?: NEW_DEVICE_ID
+
+    private val _uiState = MutableStateFlow(DeviceEditUiState(isNew = deviceId == NEW_DEVICE_ID))
+    val uiState: StateFlow<DeviceEditUiState> = _uiState.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            val existing = if (deviceId == NEW_DEVICE_ID) null else repository.find(deviceId)
+            _uiState.update { it.copy(form = existing?.toForm() ?: DeviceForm(), loading = false) }
+        }
+    }
+
+    /** Ogni modifica azzera gli errori: segnalarli mentre si corregge e solo rumore. */
+    fun edit(transform: (DeviceForm) -> DeviceForm) {
+        _uiState.update {
+            it.copy(
+                form = transform(it.form),
+                nameError = null,
+                stateTopicError = null,
+                commandTopicError = null,
+                levelCommandTopicError = null,
+            )
+        }
+    }
+
+    fun save() {
+        val form = _uiState.value.form
+        val validated = validate(form)
+        if (validated != null) {
+            _uiState.update { validated }
+            return
+        }
+        viewModelScope.launch {
+            repository.save(form.toDevice(deviceId))
+            _uiState.update { it.copy(closed = true) }
+        }
+    }
+
+    fun delete() {
+        if (deviceId == NEW_DEVICE_ID) return
+        viewModelScope.launch {
+            repository.delete(deviceId)
+            _uiState.update { it.copy(closed = true) }
+        }
+    }
+
+    /** Restituisce lo stato con gli errori, oppure null se il modulo e valido. */
+    private fun validate(form: DeviceForm): DeviceEditUiState? {
+        val nameError = if (form.name.isBlank()) "Il nome e obbligatorio" else null
+        val stateTopicError = when {
+            form.stateTopic.isBlank() -> "Il topic di stato e obbligatorio"
+            else -> null
+        }
+        val commandTopicError = when {
+            form.kind == DeviceKind.SENSOR -> null
+            form.commandTopic.isBlank() -> "Il topic di comando e obbligatorio"
+            // Le wildcard valgono per chi ascolta: pubblicare su `+` o `#` non
+            // significa niente, il broker rifiuta il messaggio.
+            form.commandTopic.hasWildcard() -> "Un topic di comando non puo contenere + o #"
+            else -> null
+        }
+        val levelCommandTopicError = when {
+            form.kind != DeviceKind.DIMMER -> null
+            form.levelCommandTopic.isBlank() -> "Serve il topic per regolare il livello"
+            form.levelCommandTopic.hasWildcard() -> "Un topic di comando non puo contenere + o #"
+            else -> null
+        }
+
+        val errors = listOf(nameError, stateTopicError, commandTopicError, levelCommandTopicError)
+        if (errors.all { it == null }) return null
+
+        return _uiState.value.copy(
+            nameError = nameError,
+            stateTopicError = stateTopicError,
+            commandTopicError = commandTopicError,
+            levelCommandTopicError = levelCommandTopicError,
+        )
+    }
+}
+
+private fun String.hasWildcard(): Boolean = contains('+') || contains('#')
+
+private fun Device.toForm() = DeviceForm(
+    name = name,
+    room = room,
+    kind = kind,
+    stateTopic = stateTopic,
+    commandTopic = commandTopic,
+    payloadOn = payloadOn,
+    payloadOff = payloadOff,
+    stateJsonKey = stateJsonKey.orEmpty(),
+    availabilityTopic = availabilityTopic.orEmpty(),
+    payloadAvailable = payloadAvailable,
+    payloadUnavailable = payloadUnavailable,
+    levelStateTopic = levelStateTopic.orEmpty(),
+    levelCommandTopic = levelCommandTopic.orEmpty(),
+    levelJsonKey = levelJsonKey.orEmpty(),
+    levelMaxText = levelMax.toString(),
+    qos = qos,
+    retained = retained,
+)
+
+private fun DeviceForm.toDevice(id: Long) = Device(
+    id = id,
+    name = name.trim(),
+    room = room.trim(),
+    kind = kind,
+    stateTopic = stateTopic.trim(),
+    commandTopic = if (kind == DeviceKind.SENSOR) "" else commandTopic.trim(),
+    payloadOn = payloadOn.ifBlank { "ON" },
+    payloadOff = payloadOff.ifBlank { "OFF" },
+    stateJsonKey = stateJsonKey.trim().takeIf { it.isNotEmpty() },
+    availabilityTopic = availabilityTopic.trim().takeIf { it.isNotEmpty() },
+    payloadAvailable = payloadAvailable.ifBlank { "online" },
+    payloadUnavailable = payloadUnavailable.ifBlank { "offline" },
+    levelStateTopic = levelStateTopic.trim().takeIf { it.isNotEmpty() && kind == DeviceKind.DIMMER },
+    levelCommandTopic = levelCommandTopic.trim().takeIf { it.isNotEmpty() && kind == DeviceKind.DIMMER },
+    levelJsonKey = levelJsonKey.trim().takeIf { it.isNotEmpty() && kind == DeviceKind.DIMMER },
+    levelMax = levelMaxText.toIntOrNull()?.coerceIn(1, 65535) ?: 100,
+    qos = qos,
+    retained = retained,
+)

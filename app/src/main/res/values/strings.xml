@@ -1,0 +1,98 @@
+<resources xmlns:tools="http://schemas.android.com/tools" tools:locale="it">
+    <string name="app_name">Smart Home</string>
+    <string name="app_version">v%1$s</string>
+    <string name="commands_sent">%1$d inviati</string>
+    <string name="commands_sent_desc">Comandi inviati da questa app</string>
+
+    <string name="action_settings">Impostazioni</string>
+    <string name="action_add_device">Aggiungi</string>
+    <string name="action_save">Salva</string>
+    <string name="action_delete">Elimina</string>
+    <string name="action_back">Indietro</string>
+    <string name="action_cancel">Annulla</string>
+    <string name="action_retry">Riprova</string>
+    <string name="action_configure">Configura</string>
+    <string name="action_reconnect">Riconnetti</string>
+
+    <string name="devices_empty_title">Nessun dispositivo</string>
+    <string name="devices_empty_body">Registra il primo dispositivo: servono il topic su cui pubblica il proprio stato e quello su cui ascolta i comandi.</string>
+
+    <string name="connection_not_configured">Nessun broker configurato</string>
+    <string name="connection_connecting">Connessione al broker…</string>
+    <string name="connection_connected">Connesso al broker</string>
+    <string name="connection_disconnected">Disconnesso dal broker</string>
+
+    <string name="device_kind_switch">Interruttore</string>
+    <string name="device_kind_light">Luce</string>
+    <string name="device_kind_dimmer">Luce regolabile</string>
+    <string name="device_kind_sensor">Sensore</string>
+
+    <string name="state_unknown">In attesa di dati</string>
+    <string name="state_pending">Comando inviato…</string>
+    <string name="device_state_on">Acceso</string>
+    <string name="device_state_off">Spento</string>
+    <string name="state_level">Livello %1$d%%</string>
+    <string name="state_unreachable">Non raggiungibile</string>
+    <string name="state_unreachable_last">Non raggiungibile · ultimo: %1$s</string>
+
+    <string name="device_new_title">Nuovo dispositivo</string>
+    <string name="device_edit_title">Modifica dispositivo</string>
+
+    <string name="section_identity">Identità</string>
+    <string name="section_state">Stato</string>
+    <string name="section_availability">Disponibilità</string>
+    <string name="section_command">Comando</string>
+    <string name="section_level">Livello</string>
+    <string name="section_advanced">Avanzate</string>
+
+    <string name="field_name">Nome</string>
+    <string name="field_room">Stanza</string>
+    <string name="field_kind">Tipo</string>
+    <string name="field_state_topic">Topic di stato</string>
+    <string name="field_command_topic">Topic di comando</string>
+    <string name="field_payload_on">Payload acceso</string>
+    <string name="field_payload_off">Payload spento</string>
+    <string name="field_state_json_key">Campo JSON dello stato</string>
+    <string name="field_availability_topic">Topic di disponibilità</string>
+    <string name="field_payload_available">Payload raggiungibile</string>
+    <string name="field_payload_unavailable">Payload non raggiungibile</string>
+    <string name="field_level_state_topic">Topic di stato del livello</string>
+    <string name="field_level_command_topic">Topic di comando del livello</string>
+    <string name="field_level_json_key">Campo JSON del livello</string>
+    <string name="field_level_max">Valore massimo del livello</string>
+    <string name="field_qos">QoS</string>
+    <string name="field_retained">Comandi ritenuti dal broker</string>
+
+    <string name="helper_state_topic">Dove il dispositivo pubblica il proprio stato. Ammette le wildcard + e #.</string>
+    <string name="helper_command_topic">Dove l\'app pubblica i comandi. Niente wildcard.</string>
+    <string name="helper_state_json_key">Lascia vuoto se il payload è già il valore. Per Tasmota: POWER.</string>
+    <string name="helper_availability_topic">Dove si dichiara se il dispositivo è vivo. Vuoto se non ne pubblica uno: l\'app mostrerà comunque l\'ultimo stato ricevuto, senza sapere se è ancora vero.</string>
+    <string name="helper_level_state_topic">Vuoto se il livello arriva sullo stesso topic dello stato.</string>
+    <string name="helper_level_max">A cosa corrisponde il 100%: 100 per Tasmota, 254 per Zigbee2MQTT.</string>
+    <string name="helper_retained">Attivalo solo se il dispositivo deve ritrovare l\'ultimo comando quando si riaccende.</string>
+
+    <string name="delete_dialog_title">Eliminare %1$s?</string>
+    <string name="delete_dialog_body">Il dispositivo sparisce dall\'app. Quello fisico non viene toccato.</string>
+
+    <string name="broker_title">Broker MQTT</string>
+    <string name="field_host">Indirizzo</string>
+    <string name="field_port">Porta</string>
+    <string name="field_tls">Connessione TLS</string>
+    <string name="field_username">Utente</string>
+    <string name="field_password">Password</string>
+    <string name="field_client_id">Client id</string>
+    <string name="helper_client_id">Vuoto: ne viene generato uno a ogni avvio.</string>
+    <string name="helper_password">Salvata in chiaro nei dati dell\'app. Il backup è disattivato, quindi non esce dal telefono.</string>
+    <string name="broker_saved">Impostazioni salvate</string>
+    <string name="password_show">Mostra</string>
+    <string name="password_hide">Nascondi</string>
+
+    <string name="debug_title">Diagnostica</string>
+    <string name="debug_switch">API di debug in rete locale</string>
+    <string name="debug_off">Spenta. Accesa, l\'app si annuncia in rete locale e apre una API di sola lettura sul proprio stato interno, e in cima compare un segno rosso finché resta accesa.</string>
+    <string name="debug_indicator">API di debug accesa</string>
+    <string name="debug_starting">Avvio in corso…</string>
+    <string name="debug_on">Attiva su %1$s · sola lettura, raggiungibile solo da indirizzi privati.</string>
+    <string name="debug_on_address_missing">Attiva, ma il telefono non ha un indirizzo di rete locale.</string>
+    <string name="debug_error">Non è partita: %1$s</string>
+</resources>
