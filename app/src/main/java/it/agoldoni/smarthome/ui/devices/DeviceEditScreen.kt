@@ -81,13 +81,18 @@ fun DeviceEditScreen(
                     }
                 },
                 actions = {
-                    if (!state.isNew) {
-                        IconButton(onClick = { confirmDelete = true }) {
-                            Icon(Icons.Default.Delete, stringResource(R.string.action_delete))
+                    // Seguendo il registro non c'e' niente da salvare e niente
+                    // da cancellare: i due comandi spariscono invece di
+                    // restare li' a non fare niente.
+                    if (!state.readOnly) {
+                        if (!state.isNew) {
+                            IconButton(onClick = { confirmDelete = true }) {
+                                Icon(Icons.Default.Delete, stringResource(R.string.action_delete))
+                            }
                         }
-                    }
-                    IconButton(onClick = viewModel::save) {
-                        Icon(Icons.Default.Check, stringResource(R.string.action_save))
+                        IconButton(onClick = viewModel::save) {
+                            Icon(Icons.Default.Check, stringResource(R.string.action_save))
+                        }
                     }
                 },
             )
@@ -100,6 +105,15 @@ fun DeviceEditScreen(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
+            if (state.readOnly) {
+                Text(
+                    text = stringResource(R.string.registry_readonly),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(vertical = 8.dp),
+                )
+            }
+
             SectionHeader(stringResource(R.string.section_identity))
 
             FormField(
@@ -107,11 +121,13 @@ fun DeviceEditScreen(
                 onValueChange = { value -> viewModel.edit { it.copy(name = value) } },
                 label = stringResource(R.string.field_name),
                 error = state.nameError,
+                enabled = !state.readOnly,
             )
             FormField(
                 value = form.room,
                 onValueChange = { value -> viewModel.edit { it.copy(room = value) } },
                 label = stringResource(R.string.field_room),
+                enabled = !state.readOnly,
             )
 
             Text(
@@ -123,6 +139,7 @@ fun DeviceEditScreen(
                 DeviceKind.entries.forEach { kind ->
                     FilterChip(
                         selected = form.kind == kind,
+                        enabled = !state.readOnly,
                         onClick = { viewModel.edit { it.copy(kind = kind) } },
                         label = { Text(stringResource(kind.labelRes)) },
                         leadingIcon = {
@@ -143,18 +160,21 @@ fun DeviceEditScreen(
                 label = stringResource(R.string.field_state_topic),
                 helper = stringResource(R.string.helper_state_topic),
                 error = state.stateTopicError,
+                enabled = !state.readOnly,
             )
             FormField(
                 value = form.stateJsonKey,
                 onValueChange = { value -> viewModel.edit { it.copy(stateJsonKey = value) } },
                 label = stringResource(R.string.field_state_json_key),
                 helper = stringResource(R.string.helper_state_json_key),
+                enabled = !state.readOnly,
             )
             FormField(
                 value = form.powerJsonKey,
                 onValueChange = { value -> viewModel.edit { it.copy(powerJsonKey = value) } },
                 label = stringResource(R.string.field_power_json_key),
                 helper = stringResource(R.string.helper_power_json_key),
+                enabled = !state.readOnly,
             )
 
             SectionHeader(stringResource(R.string.section_energy))
@@ -164,6 +184,7 @@ fun DeviceEditScreen(
                 onValueChange = { value -> viewModel.edit { it.copy(energyTopic = value) } },
                 label = stringResource(R.string.field_energy_topic),
                 helper = stringResource(R.string.helper_energy_topic),
+                enabled = !state.readOnly,
             )
             // Le due chiavi servono solo a chi ha un topic dei consumi: senza,
             // sarebbero due caselle che non governano niente.
@@ -175,12 +196,14 @@ fun DeviceEditScreen(
                         label = stringResource(R.string.field_energy_today_json_key),
                         error = state.energyTodayJsonKeyError,
                         modifier = Modifier.weight(1f),
+                        enabled = !state.readOnly,
                     )
                     FormField(
                         value = form.energyMonthJsonKey,
                         onValueChange = { value -> viewModel.edit { it.copy(energyMonthJsonKey = value) } },
                         label = stringResource(R.string.field_energy_month_json_key),
                         modifier = Modifier.weight(1f),
+                        enabled = !state.readOnly,
                     )
                 }
             }
@@ -192,6 +215,7 @@ fun DeviceEditScreen(
                 onValueChange = { value -> viewModel.edit { it.copy(availabilityTopic = value) } },
                 label = stringResource(R.string.field_availability_topic),
                 helper = stringResource(R.string.helper_availability_topic),
+                enabled = !state.readOnly,
             )
             // I due payload servono solo a chi ha un topic di disponibilita: senza,
             // sarebbero due caselle che non governano niente.
@@ -202,12 +226,14 @@ fun DeviceEditScreen(
                         onValueChange = { value -> viewModel.edit { it.copy(payloadAvailable = value) } },
                         label = stringResource(R.string.field_payload_available),
                         modifier = Modifier.weight(1f),
+                        enabled = !state.readOnly,
                     )
                     FormField(
                         value = form.payloadUnavailable,
                         onValueChange = { value -> viewModel.edit { it.copy(payloadUnavailable = value) } },
                         label = stringResource(R.string.field_payload_unavailable),
                         modifier = Modifier.weight(1f),
+                        enabled = !state.readOnly,
                     )
                 }
             }
@@ -221,6 +247,7 @@ fun DeviceEditScreen(
                     label = stringResource(R.string.field_command_topic),
                     helper = stringResource(R.string.helper_command_topic),
                     error = state.commandTopicError,
+                    enabled = !state.readOnly,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     FormField(
@@ -228,12 +255,14 @@ fun DeviceEditScreen(
                         onValueChange = { value -> viewModel.edit { it.copy(payloadOn = value) } },
                         label = stringResource(R.string.field_payload_on),
                         modifier = Modifier.weight(1f),
+                        enabled = !state.readOnly,
                     )
                     FormField(
                         value = form.payloadOff,
                         onValueChange = { value -> viewModel.edit { it.copy(payloadOff = value) } },
                         label = stringResource(R.string.field_payload_off),
                         modifier = Modifier.weight(1f),
+                        enabled = !state.readOnly,
                     )
                 }
             }
@@ -246,17 +275,20 @@ fun DeviceEditScreen(
                     onValueChange = { value -> viewModel.edit { it.copy(levelCommandTopic = value) } },
                     label = stringResource(R.string.field_level_command_topic),
                     error = state.levelCommandTopicError,
+                    enabled = !state.readOnly,
                 )
                 FormField(
                     value = form.levelStateTopic,
                     onValueChange = { value -> viewModel.edit { it.copy(levelStateTopic = value) } },
                     label = stringResource(R.string.field_level_state_topic),
                     helper = stringResource(R.string.helper_level_state_topic),
+                    enabled = !state.readOnly,
                 )
                 FormField(
                     value = form.levelJsonKey,
                     onValueChange = { value -> viewModel.edit { it.copy(levelJsonKey = value) } },
                     label = stringResource(R.string.field_level_json_key),
+                    enabled = !state.readOnly,
                 )
                 FormField(
                     value = form.levelMaxText,
@@ -266,6 +298,7 @@ fun DeviceEditScreen(
                     label = stringResource(R.string.field_level_max),
                     helper = stringResource(R.string.helper_level_max),
                     keyboardType = KeyboardType.Number,
+                    enabled = !state.readOnly,
                 )
             }
 
@@ -280,6 +313,7 @@ fun DeviceEditScreen(
                     (0..2).forEach { level ->
                         FilterChip(
                             selected = form.qos == level,
+                            enabled = !state.readOnly,
                             onClick = { viewModel.edit { it.copy(qos = level) } },
                             label = { Text(level.toString()) },
                         )
@@ -305,6 +339,7 @@ fun DeviceEditScreen(
                     }
                     Switch(
                         checked = form.retained,
+                        enabled = !state.readOnly,
                         onCheckedChange = { value -> viewModel.edit { it.copy(retained = value) } },
                     )
                 }

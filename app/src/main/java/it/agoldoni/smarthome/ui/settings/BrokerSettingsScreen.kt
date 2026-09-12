@@ -42,12 +42,17 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import it.agoldoni.smarthome.R
+import it.agoldoni.smarthome.data.settings.RegistrySettings
 import it.agoldoni.smarthome.diagnostics.DebugStatus
 import it.agoldoni.smarthome.domain.model.ConnectionState
+import it.agoldoni.smarthome.domain.registry.NO_REVISION
 import it.agoldoni.smarthome.ui.AppViewModelFactory
 import it.agoldoni.smarthome.ui.common.FormField
 import it.agoldoni.smarthome.ui.common.SectionHeader
 import androidx.compose.material3.OutlinedTextField
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -58,6 +63,7 @@ fun BrokerSettingsScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val connection by viewModel.connection.collectAsStateWithLifecycle()
     val debugStatus by viewModel.debugStatus.collectAsStateWithLifecycle()
+    val registry by viewModel.registry.collectAsStateWithLifecycle()
     val form = state.form
     val snackbarHostState = remember { SnackbarHostState() }
     var showPassword by remember { mutableStateOf(false) }
@@ -164,12 +170,82 @@ fun BrokerSettingsScreen(
                 helper = stringResource(R.string.helper_client_id),
             )
 
+            RegistrySection(
+                registry = registry,
+                onToggle = viewModel::setFollowRegistry,
+                onPrefixChange = viewModel::setRegistryPrefix,
+            )
+
             DebugApiSection(debugStatus, onToggle = viewModel::setDebugApi)
 
             Spacer(Modifier.height(32.dp))
         }
     }
 }
+
+/**
+ * Il registro condiviso: se lo si segue, da dove, e a che punto e'.
+ *
+ * Il prefisso e' qui e non fra le impostazioni del broker perche' non serve a
+ * raggiungerlo: serve a dire quale casa si sta guardando. Cambiandolo si passa
+ * a un'altra istanza — stesso broker, altri dispositivi, altro registro.
+ */
+@Composable
+private fun RegistrySection(
+    registry: RegistrySettings,
+    onToggle: (Boolean) -> Unit,
+    onPrefixChange: (String) -> Unit,
+) {
+    SectionHeader(stringResource(R.string.registry_title))
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = stringResource(R.string.registry_switch),
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.weight(1f),
+        )
+        Switch(checked = registry.follow, onCheckedChange = onToggle)
+    }
+
+    Text(
+        text = when {
+            !registry.follow -> stringResource(R.string.registry_off)
+            registry.appliedRevision == NO_REVISION ->
+                stringResource(R.string.registry_waiting, registry.topic)
+
+            else -> stringResource(
+                R.string.registry_following,
+                registry.appliedRevision,
+                formatInstant(registry.receivedAt),
+            )
+        },
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+
+    if (registry.follow) {
+        Spacer(Modifier.height(8.dp))
+        FormField(
+            value = registry.prefix,
+            onValueChange = onPrefixChange,
+            label = stringResource(R.string.field_registry_prefix),
+            helper = stringResource(R.string.helper_registry_prefix),
+        )
+    }
+}
+
+/** Ora e giorno, per la riga del registro. */
+private fun formatInstant(millis: Long): String =
+    if (millis <= 0L) {
+        "-"
+    } else {
+        SimpleDateFormat("d MMM, HH:mm", Locale.getDefault()).format(Date(millis))
+    }
 
 /**
  * L'interruttore dell'API di debug, che parte da spento a ogni installazione e

@@ -24,6 +24,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -79,11 +80,51 @@ fun DeviceListScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val debugStatus by viewModel.debugStatus.collectAsStateWithLifecycle()
+    val registry by viewModel.registryStatus.collectAsStateWithLifecycle()
+    val proposal by viewModel.proposal.collectAsStateWithLifecycle()
     val commandsSentLabel = stringResource(R.string.commands_sent_desc)
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(viewModel) {
         viewModel.messages.collect { snackbarHostState.showSnackbar(it) }
+    }
+
+    // Il primo registro che toglie qualcosa si fa annunciare, e dice cosa.
+    // Fonte di verita' unica vuol dire che quello che non c'e' sparisce, e la
+    // prima volta chi usa l'app non se lo aspetta. Succede una volta sola.
+    proposal?.let { proposta ->
+        AlertDialog(
+            onDismissRequest = viewModel::refuseRegistry,
+            title = { Text(stringResource(R.string.registry_confirm_title)) },
+            text = {
+                Column {
+                    Text(
+                        stringResource(
+                            R.string.registry_confirm_body,
+                            proposta.incoming,
+                            proposta.removing.size,
+                            proposta.removing.joinToString("\n") { "  · $it" },
+                        ),
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        text = stringResource(R.string.registry_confirm_note),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = viewModel::acceptRegistry) {
+                    Text(stringResource(R.string.action_apply))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::refuseRegistry) {
+                    Text(stringResource(R.string.action_keep))
+                }
+            },
+        )
     }
 
     Scaffold(
@@ -158,11 +199,16 @@ fun DeviceListScreen(
                     // Il tocco resta di 48.dp, ma la cornice disegnata e piu
                     // stretta: cosi il "+" sta addosso all'ingranaggio e i due
                     // si leggono come una coppia di comandi della barra.
-                    IconButton(
-                        onClick = onAddDevice,
-                        modifier = Modifier.size(40.dp),
-                    ) {
-                        Icon(Icons.Default.Add, stringResource(R.string.action_add_device))
+                    // Seguendo il registro, da qui non si aggiunge: un "+"
+                    // che apre un modulo in sola lettura sarebbe una promessa
+                    // che non viene mantenuta.
+                    if (!registry.following) {
+                        IconButton(
+                            onClick = onAddDevice,
+                            modifier = Modifier.size(40.dp),
+                        ) {
+                            Icon(Icons.Default.Add, stringResource(R.string.action_add_device))
+                        }
                     }
                     IconButton(onClick = onOpenSettings) {
                         Icon(Icons.Default.Settings, stringResource(R.string.action_settings))
@@ -188,7 +234,10 @@ fun DeviceListScreen(
                     CircularProgressIndicator()
                 }
 
-                state.devices.isEmpty() -> EmptyDevices(onAddDevice)
+                state.devices.isEmpty() -> EmptyDevices(
+                    onAddDevice = onAddDevice,
+                    following = registry.following,
+                )
 
                 // Una scheda per riga, a tutta larghezza: il nome sta per
                 // esteso e l'interruttore cade sotto il pollice invece che in
@@ -277,7 +326,7 @@ private fun ConnectionBanner(
 }
 
 @Composable
-private fun EmptyDevices(onAddDevice: () -> Unit) {
+private fun EmptyDevices(onAddDevice: () -> Unit, following: Boolean) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -293,17 +342,25 @@ private fun EmptyDevices(onAddDevice: () -> Unit) {
         )
         Spacer(Modifier.height(16.dp))
         Text(
-            text = stringResource(R.string.devices_empty_title),
+            text = stringResource(
+                if (following) R.string.devices_empty_registry_title else R.string.devices_empty_title,
+            ),
             style = MaterialTheme.typography.titleMedium,
         )
         Spacer(Modifier.height(8.dp))
         Text(
-            text = stringResource(R.string.devices_empty_body),
+            text = stringResource(
+                if (following) R.string.devices_empty_registry_body else R.string.devices_empty_body,
+            ),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Spacer(Modifier.height(16.dp))
-        TextButton(onClick = onAddDevice) { Text(stringResource(R.string.action_add_device)) }
+        // Niente pulsante quando comanda il registro: non porterebbe da
+        // nessuna parte.
+        if (!following) {
+            Spacer(Modifier.height(16.dp))
+            TextButton(onClick = onAddDevice) { Text(stringResource(R.string.action_add_device)) }
+        }
     }
 }
 

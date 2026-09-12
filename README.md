@@ -11,6 +11,10 @@ pubblicano il proprio stato e dove ascoltano i comandi. È più lavoro la prima 
 funziona con qualunque cosa parli MQTT — Tasmota, Zigbee2MQTT, ESPHome, Home Assistant o
 un ESP32 programmato in casa — senza aspettare che qualcuno ne scriva l'integrazione.
 
+A mano **una volta sola per tutta la casa**, però: c'è un configuratore web da cui si
+scrive l'elenco, e l'elenco arriva a ogni telefono passando dal broker. Vedi *Il registro
+condiviso*.
+
 ## Come funziona
 
 1. **Un solo collegamento al broker**, aperto per tutta la vita del processo e condiviso da
@@ -44,7 +48,9 @@ un ESP32 programmato in casa — senza aspettare che qualcuno ne scriva l'integr
 
 ## Registrare un dispositivo
 
-Il pulsante **Aggiungi** apre il modulo. I campi che contano:
+Il pulsante **Aggiungi** apre il modulo — a meno che l'app non stia seguendo un registro,
+nel qual caso i dispositivi si modificano di là e qui si guardano soltanto. I campi che
+contano:
 
 | Campo | A cosa serve |
 |---|---|
@@ -136,6 +142,52 @@ mese` — che il ponte tiene ora per ora in un archivio interrogabile per giorni
 differenza fra spento davvero e in attesa — sopra è intero. A presa spenta non si mostra:
 a relay aperto i watt sono zero per forza.
 
+## Il registro condiviso
+
+Registrare sette prese vuol dire compilare una cinquantina di campi, e rifarli su ogni
+telefono di casa. Peggio: metà sono topic, e un topic sbagliato **non dà nessun errore** —
+dà una scheda ferma su "in attesa di dati".
+
+Il **configuratore web** (`bridge/configuratore/`) è una pagina da cui si fa il lavoro una
+volta sola. Quello che si salva finisce sul broker come messaggio ritenuto, su
+`casa/registro/dispositivi`, e ogni app che si collega lo riceve — adesso, o fra tre
+settimane su un telefono che ancora non esiste. È lo stesso meccanismo per cui l'app trova
+subito lo stato delle prese quando riapre: il broker tiene l'ultimo valore e lo consegna a
+chi si iscrive, senza che nessuno debba essere acceso nel frattempo.
+
+Nell'app, **Impostazioni → Registro dei dispositivi**:
+
+- **Segui il registro** è acceso di partenza, ma finché un registro non arriva davvero non
+  cambia niente: l'app si comporta come ha sempre fatto. Spegnendolo torna a gestirsi i
+  dispositivi da sola, con quelli che ha.
+- **Il prefisso** è il ramo dei topic di casa, `casa` di norma. Cambiarlo sposta insieme i
+  dispositivi e il registro che li elenca: è così che sullo stesso broker convivono due
+  installazioni.
+
+Tre cose che rendono la cosa sopportabile invece che spaventosa:
+
+- **La prima volta chiede.** Se il registro porta dispositivi che sul telefono non ci sono,
+  e ne toglie di quelli che ci sono, lo dice e aspetta un sì, con i nomi di quello che
+  sparirebbe. Succede una volta sola: dopo, il registro si applica da sé.
+- **Chi era già registrato a mano viene adottato**, non cancellato e rifatto: un dispositivo
+  locale che ha lo stesso topic di stato di uno del registro ne prende l'identità restando
+  lo stesso — e con lui restano lo stato e i consumi già ricevuti.
+- **Un registro incomprensibile non è un registro vuoto.** Un documento che non si legge, o
+  scritto in una versione più nuova del formato, viene rifiutato in blocco e resta applicato
+  quello di prima. Un tipo di dispositivo sconosciuto salta quel dispositivo e non gli altri.
+  Ogni rifiuto compare fra le anomalie di `/state`.
+
+Per cancellare il registro si cancella il messaggio ritenuto:
+
+```bash
+mosquitto_pub -h <broker> -u <utente> -P <password> -t casa/registro/dispositivi -r -n
+```
+
+Le app smettono di seguirlo e **tengono i dispositivi che hanno**. La lettura opposta —
+registro cancellato uguale casa senza dispositivi — farebbe di un comando solo un disastro.
+
+Il formato, i campi e le regole di rifiuto stanno in `bridge/configuratore/SCHEMA.md`.
+
 ## Il broker
 
 L'icona in alto a destra apre le impostazioni: indirizzo, porta, TLS, credenziali e client
@@ -192,6 +244,7 @@ compare l'indirizzo da aprire dal PC. Porta **8787**, TCP per l'API e UDP per la
 python3 tools/debug-api.py               # scopre il telefono e stampa tutto lo stato
 python3 tools/debug-api.py discover      # solo: chi c'è e a che indirizzo
 python3 tools/debug-api.py health
+python3 tools/debug-api.py registry      # se segue un registro, da dove, e com'e andata l'ultima lettura
 python3 tools/debug-api.py mqtt --limit 100
 python3 tools/debug-api.py log --since 1757600000000
 python3 tools/debug-api.py --adb state   # dal telefono collegato via USB, senza passare dalla rete
@@ -206,6 +259,7 @@ torna a cercare solo quando quell'indirizzo smette di rispondere.
 | `/health` | vivo o no, in due righe |
 | `/broker` | coordinate del broker, stato del collegamento, client Paho |
 | `/devices` | i dispositivi registrati, la loro configurazione e il loro stato |
+| `/registry` | il registro condiviso: se lo si segue, da dove, revisione, e cosa è stato scartato o rifiutato |
 | `/mqtt` | sottoscrizioni attive, contatori, traffico recente topic per topic |
 | `/log` | gli eventi interni recenti |
 | `/info` | build, telefono, interfacce di rete |
@@ -305,8 +359,11 @@ sparito.
 
 - **Il collegamento vive col processo.** Chiusa l'app, niente ascolto e niente notifiche.
   Per lo stato in tempo reale a schermo spento servirebbe un foreground service.
-- **Nessuna scoperta automatica dei dispositivi.** Si registrano a mano; l'MQTT discovery di
-  Home Assistant non è letto.
+- **Nessuna scoperta automatica dei dispositivi.** Si registrano a mano — una volta sola per
+  tutta la casa, dal configuratore, ma a mano. L'MQTT discovery di Home Assistant non è
+  letto, e il configuratore non propone i topic che vede passare: quello è il passo dopo.
+- **Il registro va in una direzione sola.** Si scrive dal configuratore e si legge dalle
+  app; un'app non ci scrive dentro.
 - **Nessun raggruppamento.** La stanza è solo un'etichetta: non ordina né raccoglie le
   schede.
 - **Un solo broker.**

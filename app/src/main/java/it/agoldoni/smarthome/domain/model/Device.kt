@@ -27,6 +27,15 @@ enum class DeviceKind {
  */
 data class Device(
     val id: Long = 0L,
+    /**
+     * Identita' del dispositivo dentro il registro condiviso, stabile per
+     * sempre. Vuota per chi e' stato registrato a mano su questo telefono prima
+     * che un registro esistesse: e' da quel vuoto che parte l'adozione.
+     *
+     * Non e' [id] e non puo' esserlo: quello e' un autoincrement locale, e due
+     * telefoni darebbero numeri diversi alle stesse prese.
+     */
+    val uuid: String = "",
     val name: String,
     val room: String = "",
     val kind: DeviceKind = DeviceKind.SWITCH,

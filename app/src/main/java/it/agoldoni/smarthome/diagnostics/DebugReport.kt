@@ -6,6 +6,8 @@ import it.agoldoni.smarthome.di.AppContainer
 import it.agoldoni.smarthome.domain.model.ConnectionState
 import it.agoldoni.smarthome.domain.model.Device
 import it.agoldoni.smarthome.domain.model.DeviceState
+import it.agoldoni.smarthome.domain.registry.NO_REVISION
+import it.agoldoni.smarthome.driver.mqtt.MqttTopics
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.NetworkInterface
@@ -41,6 +43,7 @@ internal class DebugReport(
         "/info" -> ok(info())
         "/broker" -> ok(broker())
         "/devices" -> ok(devices())
+        "/registry" -> ok(registry())
         "/mqtt" -> ok(mqtt(request))
         "/log" -> ok(log(request))
         "/state" -> ok(state(request))
@@ -88,6 +91,7 @@ internal class DebugReport(
         put("/info", "build, telefono, interfacce di rete")
         put("/broker", "coordinate del broker, stato del collegamento, client Paho")
         put("/devices", "dispositivi registrati con la loro configurazione e il loro stato")
+        put("/registry", "il registro condiviso: se lo si segue, da dove, e com'e' andata l'ultima lettura")
         put("/mqtt", "sottoscrizioni attive, contatori, traffico recente")
         put("/log", "eventi interni recenti")
     }
@@ -164,6 +168,36 @@ internal class DebugReport(
         })
     }
 
+    /**
+     * Il registro condiviso.
+     *
+     * Non c'e' niente di segreto qui dentro: il registro e' la configurazione
+     * dei dispositivi, non le credenziali per raggiungerli.
+     */
+    private fun registry() = JSONObject().apply {
+        val stato = container.registrySync.status.value
+        put("followEnabled", stato.followEnabled)
+        put("following", stato.following)
+        put("prefix", stato.prefix)
+        put("topic", stato.topic)
+        put("revision", stato.revision)
+        stamp("receivedAt", stato.receivedAt.takeIf { it > 0L })
+        put("deviceCount", stato.deviceCount)
+        put("skipped", JSONArray().apply { stato.skipped.forEach { put(it) } })
+        putOrNull("lastRejection", stato.lastRejection)
+        val proposta = container.registrySync.proposal.value
+        putOrNull(
+            "awaitingConfirmation",
+            proposta?.let {
+                JSONObject().apply {
+                    put("revision", it.revision)
+                    put("incoming", it.incoming)
+                    put("removing", JSONArray().apply { it.removing.forEach { nome -> put(nome) } })
+                }
+            },
+        )
+    }
+
     private fun mqtt(request: DebugHttpServer.Request) = JSONObject().apply {
         val snapshot = snapshot()
         put("connection", snapshot?.let { connection(it.connection) } ?: JSONObject.NULL)
@@ -192,6 +226,7 @@ internal class DebugReport(
         stamp("at", System.currentTimeMillis())
         put("uptimeMs", uptime())
         put("warnings", warnings(snapshot, devices, states))
+        put("registry", registry())
         put("broker", broker())
         put("devices", devices())
         put("mqtt", JSONObject().apply {
@@ -232,6 +267,32 @@ internal class DebugReport(
         }
         if (devices.isEmpty()) put("Nessun dispositivo registrato nell'app")
 
+        val registro = container.registrySync.status.value
+        if (registro.followEnabled && registro.revision == NO_REVISION) {
+            put(
+                "Il registro e seguito ma non ne e mai arrivato uno sul topic ${registro.topic}: " +
+                    "l'app gestisce i dispositivi da se",
+            )
+        }
+        registro.lastRejection?.let {
+            put("L'ultimo registro e stato rifiutato in blocco ($it): resta applicato il precedente")
+        }
+        registro.skipped.forEach { put("Il registro ha scartato un dispositivo — $it") }
+        container.registrySync.proposal.value?.let {
+            put(
+                "Una prima applicazione del registro aspetta conferma: ${it.incoming} dal registro, " +
+                    "${it.removing.size} da rimuovere (${it.removing.joinToString()})",
+            )
+        }
+        if (registro.followEnabled) {
+            devices.filter { MqttTopics.matches(it.stateTopic, registro.topic) }.forEach {
+                put(
+                    "${it.name}: il suo topic di stato ${it.stateTopic} combacia con quello del " +
+                        "registro, ma il registro viene intercettato prima e non finira mai nella sua scheda",
+                )
+            }
+        }
+
         devices.forEach { device ->
             if (device.stateTopic.isBlank()) {
                 put("${device.name}: nessun topic di stato, non potra mai sapere come sta")
@@ -261,6 +322,8 @@ internal class DebugReport(
     private fun device(device: Device, state: DeviceState?, subscriptions: Map<String, Int>) =
         JSONObject().apply {
             put("id", device.id)
+            // Vuoto: registrato a mano, nessun registro lo ha mai nominato.
+            put("uuid", device.uuid)
             put("name", device.name)
             put("room", device.room)
             put("kind", device.kind.name)

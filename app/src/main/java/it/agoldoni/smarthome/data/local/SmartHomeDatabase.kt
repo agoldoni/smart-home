@@ -5,7 +5,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [DeviceEntity::class], version = 4, exportSchema = true)
+@Database(entities = [DeviceEntity::class], version = 5, exportSchema = true)
 abstract class SmartHomeDatabase : RoomDatabase() {
     abstract fun deviceDao(): DeviceDao
 }
@@ -52,5 +52,23 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
         db.execSQL("ALTER TABLE devices ADD COLUMN energyTopic TEXT")
         db.execSQL("ALTER TABLE devices ADD COLUMN energyTodayJsonKey TEXT")
         db.execSQL("ALTER TABLE devices ADD COLUMN energyMonthJsonKey TEXT")
+    }
+}
+
+/**
+ * Aggiunge l'identita' del dispositivo nel registro condiviso.
+ *
+ * Stringa vuota per le righe che ci sono gia', e non e' un ripiego: vuol dire
+ * "questo dispositivo nessun registro lo ha mai nominato", che e' la verita' per
+ * ogni dispositivo registrato finora. Da li' passa l'adozione — il primo
+ * registro che arriva riconosce dal topic di stato quelli registrati a mano e
+ * gli da' un uuid, invece di cancellarli e rifarli con un id nuovo.
+ *
+ * Additiva come le tre precedenti, e per la stessa ragione: qui dentro ci sono
+ * dispositivi inseriti uno per uno a mano.
+ */
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE devices ADD COLUMN uuid TEXT NOT NULL DEFAULT ''")
     }
 }

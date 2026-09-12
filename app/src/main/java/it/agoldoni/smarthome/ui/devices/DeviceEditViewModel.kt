@@ -4,6 +4,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import it.agoldoni.smarthome.data.DeviceRepository
+import it.agoldoni.smarthome.data.registry.RegistrySync
 import it.agoldoni.smarthome.domain.model.Device
 import it.agoldoni.smarthome.domain.model.DeviceKind
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -51,11 +52,18 @@ data class DeviceEditUiState(
     val energyTodayJsonKeyError: String? = null,
     /** Salvataggio o cancellazione conclusi: la schermata si chiude. */
     val closed: Boolean = false,
+    /**
+     * L'app segue un registro: i dispositivi si modificano dal configuratore e
+     * qui si guardano soltanto. Il modulo resta visibile — vedere com'e'
+     * configurato un dispositivo serve anche quando non lo si puo' cambiare.
+     */
+    val readOnly: Boolean = false,
 )
 
 class DeviceEditViewModel(
     savedStateHandle: SavedStateHandle,
     private val repository: DeviceRepository,
+    registry: RegistrySync,
 ) : ViewModel() {
 
     private val deviceId: Long = savedStateHandle.get<String>(ARG_DEVICE_ID)?.toLongOrNull() ?: NEW_DEVICE_ID
@@ -63,10 +71,26 @@ class DeviceEditViewModel(
     private val _uiState = MutableStateFlow(DeviceEditUiState(isNew = deviceId == NEW_DEVICE_ID))
     val uiState: StateFlow<DeviceEditUiState> = _uiState.asStateFlow()
 
+    /**
+     * L'identita' nel registro, tenuta da parte perche' non e' un campo del
+     * modulo: non si scrive a mano e non si vede. Ma va riportata nel
+     * dispositivo salvato, altrimenti una modifica fatta a mano — possibile dopo
+     * aver spento "segui il registro" — lo scollegherebbe dal registro, e al
+     * ritorno si ritroverebbe adottato o duplicato.
+     */
+    private var uuid: String = ""
+
+
     init {
         viewModelScope.launch {
             val existing = if (deviceId == NEW_DEVICE_ID) null else repository.find(deviceId)
+            uuid = existing?.uuid.orEmpty()
             _uiState.update { it.copy(form = existing?.toForm() ?: DeviceForm(), loading = false) }
+        }
+        viewModelScope.launch {
+            registry.status.collect { stato ->
+                _uiState.update { it.copy(readOnly = stato.following) }
+            }
         }
     }
 
@@ -85,6 +109,7 @@ class DeviceEditViewModel(
     }
 
     fun save() {
+        if (_uiState.value.readOnly) return
         val form = _uiState.value.form
         val validated = validate(form)
         if (validated != null) {
@@ -92,12 +117,13 @@ class DeviceEditViewModel(
             return
         }
         viewModelScope.launch {
-            repository.save(form.toDevice(deviceId))
+            repository.save(form.toDevice(deviceId, uuid))
             _uiState.update { it.copy(closed = true) }
         }
     }
 
     fun delete() {
+        if (_uiState.value.readOnly) return
         if (deviceId == NEW_DEVICE_ID) return
         viewModelScope.launch {
             repository.delete(deviceId)
@@ -176,8 +202,9 @@ private fun Device.toForm() = DeviceForm(
     retained = retained,
 )
 
-private fun DeviceForm.toDevice(id: Long) = Device(
+private fun DeviceForm.toDevice(id: Long, uuid: String) = Device(
     id = id,
+    uuid = uuid,
     name = name.trim(),
     room = room.trim(),
     kind = kind,

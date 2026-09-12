@@ -105,4 +105,22 @@
     <string name="debug_on">Attiva su %1$s · sola lettura, raggiungibile solo da indirizzi privati.</string>
     <string name="debug_on_address_missing">Attiva, ma il telefono non ha un indirizzo di rete locale.</string>
     <string name="debug_error">Non è partita: %1$s</string>
+
+    <string name="registry_title">Registro dei dispositivi</string>
+    <string name="registry_switch">Segui il registro</string>
+    <string name="registry_off">Spento: i dispositivi si aggiungono e si modificano da questo telefono, e restano su questo telefono.</string>
+    <string name="registry_waiting">Acceso, ma non è ancora arrivato nessun registro da %1$s. Finché non arriva, i dispositivi si gestiscono da qui.</string>
+    <string name="registry_following">Revisione %1$d, ricevuta %2$s. I dispositivi arrivano da lì e qui non si modificano.</string>
+    <string name="registry_rejected">L\'ultimo documento è stato rifiutato (%1$s). Resta applicato quello di prima.</string>
+    <string name="registry_skipped">%1$d dispositivi del registro sono stati scartati. Il dettaglio è in Diagnostica, /registry.</string>
+    <string name="field_registry_prefix">Prefisso</string>
+    <string name="helper_registry_prefix">Il ramo dei topic di casa. Cambiarlo sposta insieme dispositivi e registro: è così che si tiene una seconda installazione sullo stesso broker.</string>
+    <string name="registry_readonly">I dispositivi arrivano dal configuratore web. Qui si guardano, non si modificano.</string>
+    <string name="registry_confirm_title">Applicare il registro?</string>
+    <string name="registry_confirm_body">Il registro porta %1$d dispositivi. Questi %2$d non ci sono e verranno rimossi da questo telefono:\n\n%3$s</string>
+    <string name="registry_confirm_note">Succede una volta sola: dopo, il registro si applica da sé.</string>
+    <string name="action_apply">Applica</string>
+    <string name="action_keep">Lascia stare</string>
+    <string name="devices_empty_registry_title">Nessun dispositivo nel registro</string>
+    <string name="devices_empty_registry_body">Questo telefono segue il registro pubblicato sul broker, e per ora è vuoto. Si riempie dal configuratore web.</string>
 </resources>

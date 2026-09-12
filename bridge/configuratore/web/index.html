@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Configuratore — Smart Home</title>
+<link rel="icon" href="icona.svg">
+<link rel="stylesheet" href="stile.css">
+</head>
+<body>
+
+<header>
+  <h1>Configuratore dei dispositivi</h1>
+  <p>Si configura qui, una volta sola. Il registro finisce sul broker come messaggio
+     ritenuto, e ogni app che si collega lo trova — anche un telefono acceso fra tre
+     settimane.</p>
+</header>
+
+<main>
+
+  <section id="pannello-collegamento">
+    <h2>Broker</h2>
+    <form id="collegamento">
+      <div class="campo"><label for="host">Indirizzo</label>
+        <input id="host" type="text" placeholder="192.168.86.10" spellcheck="false" autocapitalize="off">
+        <p class="aiuto">Lo stesso broker configurato nell’app, sulla porta websocket.</p></div>
+      <div class="campo stretto"><label for="porta">Porta</label>
+        <input id="porta" type="number" value="9001"></div>
+      <div class="campo"><label for="utente">Utente</label>
+        <input id="utente" type="text" spellcheck="false" autocapitalize="off" autocomplete="username"></div>
+      <div class="campo"><label for="password">Password</label>
+        <input id="password" type="password" autocomplete="current-password">
+        <p class="aiuto">Resta in memoria per la durata di questa scheda. Non viene salvata.</p></div>
+      <div class="campo"><label for="prefisso">Prefisso</label>
+        <input id="prefisso" type="text" value="casa" spellcheck="false" autocapitalize="off">
+        <p class="aiuto">Il ramo dei topic di casa. Cambiandolo si passa a un’altra
+           installazione sullo stesso broker: altri dispositivi, altro registro.</p></div>
+      <button type="submit" class="principale">Collega</button>
+    </form>
+    <p id="avviso-collegamento" class="avviso"></p>
+  </section>
+
+  <section id="pannello-registro">
+    <div class="testata">
+      <h2>Dispositivi</h2>
+      <div class="azioni">
+        <code id="topic-corrente"></code>
+        <button id="aggiungi" class="principale">Aggiungi</button>
+      </div>
+    </div>
+    <p id="avviso-registro" class="avviso"></p>
+    <div id="elenco"></div>
+    <details>
+      <summary>Modelli</summary>
+      <div id="modelli"></div>
+    </details>
+  </section>
+
+  <section id="modulo"></section>
+
+</main>
+
+<footer>
+  <p>Il documento e le sue regole stanno in <code>bridge/configuratore/SCHEMA.md</code>.
+     Per cancellare il registro:
+     <code>mosquitto_pub -t &lt;prefisso&gt;/registro/dispositivi -r -n</code> — le app
+     smettono di seguirlo e tengono i dispositivi che hanno.</p>
+</footer>
+
+<script src="vendor/mqtt.min.js"></script>
+<script type="module" src="app.js"></script>
+</body>
+</html>

@@ -6,6 +6,7 @@ import it.agoldoni.smarthome.diagnostics.DriverDiagnostics
 import it.agoldoni.smarthome.diagnostics.DriverSnapshot
 import it.agoldoni.smarthome.domain.driver.DeviceCommand
 import it.agoldoni.smarthome.domain.driver.DeviceDriver
+import it.agoldoni.smarthome.domain.driver.IncomingMessage
 import it.agoldoni.smarthome.domain.model.ConnectionState
 import it.agoldoni.smarthome.domain.model.Device
 import it.agoldoni.smarthome.domain.model.DeviceState
@@ -13,8 +14,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.update
@@ -54,6 +58,15 @@ class MqttDeviceDriver(
     private val _commandsSent = MutableStateFlow(0)
     override val commandsSent: StateFlow<Int> = _commandsSent.asStateFlow()
 
+    /**
+     * `replay = 1` non e' prudenza generica: il registro e' un messaggio
+     * ritenuto, quindi arriva nell'istante della sottoscrizione. Senza replay,
+     * un ascoltatore che si attacca un momento dopo aspetterebbe la prossima
+     * pubblicazione, che puo' essere fra tre settimane.
+     */
+    private val _incoming = MutableSharedFlow<IncomingMessage>(replay = 1, extraBufferCapacity = 8)
+    override val incoming: SharedFlow<IncomingMessage> = _incoming.asSharedFlow()
+
     /** Serializza apertura, chiusura e sottoscrizioni: Paho non e rientrante su questi. */
     private val lock = Mutex()
 
@@ -62,6 +75,14 @@ class MqttDeviceDriver(
 
     @Volatile
     private var devices: List<Device> = emptyList()
+
+    /**
+     * Topic seguiti che non appartengono a nessun dispositivo. Vive a parte da
+     * [devices] perche' deve esistere anche quando i dispositivi sono zero, che
+     * e' esattamente il telefono appena installato.
+     */
+    @Volatile
+    private var watched: Map<String, Int> = emptyMap()
 
     @Volatile
     private var settingsNow = BrokerSettings()
@@ -186,6 +207,24 @@ class MqttDeviceDriver(
                         "rifatte per ${cambiati.joinToString { it.name }}: configurazione cambiata",
                     )
                 }
+                syncSubscriptions()
+            }
+        }
+    }
+
+    override fun watch(topics: Map<String, Int>) {
+        scope.launch {
+            lock.withLock {
+                if (topics == watched) return@withLock
+                watched = topics
+                DiagnosticsLog.event(
+                    "sistema",
+                    if (topics.isEmpty()) {
+                        "nessun topic di sistema seguito"
+                    } else {
+                        "topic di sistema: ${topics.entries.joinToString { "${it.key} (qos ${it.value})" }}"
+                    },
+                )
                 syncSubscriptions()
             }
         }
@@ -350,7 +389,16 @@ class MqttDeviceDriver(
         val active = client ?: return@withContext
         if (!active.isConnected) return@withContext
 
+        // I topic di sistema entrano qui dentro insieme a quelli dei
+        // dispositivi, e non e' un'aggiunta cosmetica: `obsolete` e' la
+        // differenza fra cio' che e' sottoscritto e questa mappa, quindi un
+        // topic che non ci finisse verrebbe disiscritto alla prima
+        // risincronizzazione — cioe' subito, perche' connectComplete azzera
+        // `subscribed` e richiama questa funzione a ogni collegamento.
         val wanted = mutableMapOf<String, Int>()
+        watched.forEach { (topic, qos) ->
+            wanted[topic] = maxOf(wanted[topic] ?: 0, qos)
+        }
         devices.forEach { device ->
             device.subscriptions.forEach { topic ->
                 wanted[topic] = maxOf(wanted[topic] ?: 0, device.qos)
@@ -427,6 +475,18 @@ class MqttDeviceDriver(
     }
 
     private fun onMessage(topic: String, payload: String) {
+        // Prima del ciclo dei dispositivi, e con un return.
+        //
+        // Le wildcard sono ammesse nel topic di stato, quindi un dispositivo
+        // registrato con `casa/#` e' legittimo — e senza questo si prenderebbe
+        // anche il registro, usandone i cinquemila caratteri di JSON come
+        // proprio stato.
+        if (watched.keys.any { MqttTopics.matches(it, topic) }) {
+            DiagnosticsLog.incoming(topic, payload, matched = 1)
+            _incoming.tryEmit(IncomingMessage(topic, payload))
+            return
+        }
+
         val now = System.currentTimeMillis()
         val updates = mutableMapOf<Long, DeviceState>()
         var matched = 0

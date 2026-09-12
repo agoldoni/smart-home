@@ -1,0 +1,115 @@
+:root {
+  --sfondo: #f6f6f4;
+  --carta: #ffffff;
+  --bordo: #dcdcd6;
+  --testo: #1c1c1a;
+  --tenue: #6a6a63;
+  --accento: #2f6f4f;
+  --errore: #a3372b;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --sfondo: #16171a;
+    --carta: #1f2126;
+    --bordo: #33363d;
+    --testo: #e8e8e4;
+    --tenue: #9a9a93;
+    --accento: #6fbf92;
+    --errore: #e0806f;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 0 16px 48px;
+  background: var(--sfondo);
+  color: var(--testo);
+  font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+header, main, footer { max-width: 820px; margin: 0 auto; }
+header { padding-block: 24px 8px; }
+h1 { font-size: 1.45rem; margin: 0 0 6px; }
+h2 { font-size: 1.1rem; margin: 0; }
+h3 { font-size: .82rem; text-transform: uppercase; letter-spacing: .05em;
+     color: var(--accento); margin: 18px 0 6px; }
+header p { color: var(--tenue); margin: 0; max-width: 62ch; }
+
+section {
+  background: var(--carta);
+  border: 1px solid var(--bordo);
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+/* Il registro compare solo a collegamento fatto: prima non c'e' niente da dire. */
+#pannello-registro { display: none; }
+body[data-collegato="si"] #pannello-registro { display: block; }
+#modulo { display: none; }
+body[data-modulo="si"] #modulo { display: block; }
+body[data-modulo="si"] #pannello-registro { opacity: .45; pointer-events: none; }
+
+.testata { display: flex; align-items: center; justify-content: space-between;
+           gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
+.azioni { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+.campo { margin-bottom: 12px; }
+.campo.stretto { max-width: 160px; }
+label { display: block; font-size: .8rem; color: var(--tenue); margin-bottom: 3px; }
+input[type=text], input[type=number], input[type=password], select {
+  width: 100%; padding: 8px 10px; font: inherit;
+  color: var(--testo); background: var(--sfondo);
+  border: 1px solid var(--bordo); border-radius: 6px;
+}
+input[type=checkbox] { width: 18px; height: 18px; }
+input:focus, select:focus, button:focus { outline: 2px solid var(--accento); outline-offset: 1px; }
+.in-errore input, .in-errore select { border-color: var(--errore); }
+
+.aiuto { font-size: .8rem; color: var(--tenue); margin: 3px 0 0; }
+.errore { font-size: .8rem; color: var(--errore); margin: 3px 0 0; }
+.uuid { margin-top: 16px; font-family: ui-monospace, monospace; font-size: .72rem; }
+
+button {
+  font: inherit; padding: 7px 13px; cursor: pointer;
+  color: var(--testo); background: var(--carta);
+  border: 1px solid var(--bordo); border-radius: 6px;
+}
+button:hover { border-color: var(--accento); }
+button.principale { background: var(--accento); border-color: var(--accento); color: #fff; }
+button.pericolo:hover { border-color: var(--errore); color: var(--errore); }
+
+.pastiglie { display: flex; gap: 6px; flex-wrap: wrap; }
+.pastiglia.scelta { background: var(--accento); border-color: var(--accento); color: #fff; }
+
+.scheda { border: 1px solid var(--bordo); border-radius: 8px;
+          padding: 10px 12px; margin-top: 10px; }
+.scheda .riga { display: flex; align-items: baseline; gap: 10px;
+                justify-content: space-between; }
+.scheda .tipo { font-size: .78rem; color: var(--tenue); }
+.scheda code { display: block; font-size: .78rem; color: var(--tenue);
+               margin: 2px 0 8px; overflow-wrap: anywhere; }
+
+code { font-family: ui-monospace, SFMono-Regular, monospace; font-size: .8rem; }
+
+.avviso { margin: 8px 0 0; font-size: .85rem; color: var(--tenue); }
+.avviso.ok { color: var(--accento); }
+.avviso.errore { color: var(--errore); }
+
+.niente { color: var(--tenue); margin: 12px 0 0; }
+
+details { margin-top: 18px; }
+summary { cursor: pointer; color: var(--accento); font-size: .88rem; }
+.modello { display: flex; align-items: center; justify-content: space-between;
+           gap: 12px; border-top: 1px solid var(--bordo); padding: 10px 0; }
+.modello p { margin: 2px 0 0; }
+
+footer { color: var(--tenue); font-size: .82rem; }
+footer code { overflow-wrap: anywhere; }
+
+@media (max-width: 560px) {
+  .testata, .modello { flex-direction: column; align-items: flex-start; }
+}

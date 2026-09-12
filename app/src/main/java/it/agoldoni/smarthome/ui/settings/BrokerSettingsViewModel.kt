@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import it.agoldoni.smarthome.data.settings.BrokerSettings
 import it.agoldoni.smarthome.data.settings.BrokerSettingsStore
+import it.agoldoni.smarthome.data.settings.RegistrySettings
+import it.agoldoni.smarthome.data.settings.RegistryStore
 import it.agoldoni.smarthome.diagnostics.DebugBridge
 import it.agoldoni.smarthome.diagnostics.DebugStatus
 import it.agoldoni.smarthome.domain.driver.DeviceDriver
@@ -11,7 +13,9 @@ import it.agoldoni.smarthome.domain.model.ConnectionState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -39,6 +43,7 @@ data class BrokerSettingsUiState(
 class BrokerSettingsViewModel(
     private val store: BrokerSettingsStore,
     private val driver: DeviceDriver,
+    private val registryStore: RegistryStore,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(BrokerSettingsUiState())
@@ -47,6 +52,26 @@ class BrokerSettingsViewModel(
     val connection: StateFlow<ConnectionState> = driver.connection
 
     val debugStatus: StateFlow<DebugStatus> = DebugBridge.status
+
+    /**
+     * Il registro ha un file di preferenze suo e non passa da [BrokerForm]: un
+     * campo in piu' dentro le impostazioni del broker farebbe riaprire il
+     * collegamento a ogni revisione ricevuta.
+     */
+    val registry: StateFlow<RegistrySettings> = registryStore.settings.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS),
+        initialValue = RegistrySettings(),
+    )
+
+    fun setFollowRegistry(follow: Boolean) {
+        viewModelScope.launch { registryStore.setFollow(follow) }
+    }
+
+    /** Scritto mentre si digita: il prefisso passa per stati intermedi senza senso. */
+    fun setRegistryPrefix(prefix: String) {
+        viewModelScope.launch { registryStore.setPrefix(prefix) }
+    }
 
     init {
         viewModelScope.launch {
@@ -92,6 +117,10 @@ class BrokerSettingsViewModel(
     fun reconnect() = driver.reconnect()
 
     fun setDebugApi(enabled: Boolean) = DebugBridge.setEnabled(enabled)
+
+    private companion object {
+        const val STOP_TIMEOUT_MS = 5_000L
+    }
 }
 
 private fun BrokerSettings.toForm() = BrokerForm(

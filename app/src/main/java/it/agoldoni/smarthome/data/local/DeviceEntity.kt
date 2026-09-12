@@ -8,6 +8,8 @@ import it.agoldoni.smarthome.domain.model.DeviceKind
 @Entity(tableName = "devices")
 data class DeviceEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0L,
+    /** Identita' nel registro condiviso. Vuota finche' nessun registro l'ha nominato. */
+    val uuid: String,
     val name: String,
     val room: String,
     /**
@@ -38,6 +40,7 @@ data class DeviceEntity(
 
 fun DeviceEntity.toDomain(): Device = Device(
     id = id,
+    uuid = uuid,
     name = name,
     room = room,
     kind = runCatching { DeviceKind.valueOf(kind) }.getOrDefault(DeviceKind.SWITCH),
@@ -63,6 +66,7 @@ fun DeviceEntity.toDomain(): Device = Device(
 
 fun Device.toEntity(): DeviceEntity = DeviceEntity(
     id = id,
+    uuid = uuid,
     name = name,
     room = room,
     kind = kind.name,

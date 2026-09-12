@@ -9,6 +9,7 @@ quando gli pare) e interroga l'API.
     python3 tools/debug-api.py                 # scopre e stampa lo stato completo
     python3 tools/debug-api.py discover        # solo la scoperta
     python3 tools/debug-api.py health
+    python3 tools/debug-api.py registry
     python3 tools/debug-api.py mqtt --limit 100
     python3 tools/debug-api.py log --since 1757600000000
     python3 tools/debug-api.py get /devices
@@ -34,7 +35,7 @@ PROBE = b"SMART-HOME-DEBUG?"
 DEFAULT_PORT = 8787
 CACHE = os.path.expanduser("~/.cache/smart-home/debug-endpoint")
 
-SHORTCUTS = ("state", "health", "info", "broker", "devices", "mqtt", "log")
+SHORTCUTS = ("state", "health", "info", "broker", "devices", "registry", "mqtt", "log")
 
 
 def broadcast_targets():

@@ -206,7 +206,11 @@ una volta al minuto, così un riavvio del ponte ne perde al massimo sessanta sec
 
 ## Registrare le prese nell'app
 
-Per ciascuna, nel modulo *Aggiungi*:
+Dal **configuratore web** (sezione qui sotto) basta il nome: si sceglie il modello *Presa
+del ponte Tuya* e i quattro topic con i quattro campi JSON li compila la convenzione. È il
+modo consigliato, e le sette prese si fanno in un paio di minuti.
+
+A mano, nel modulo *Aggiungi* dell'app, per ciascuna:
 
 | campo | valore |
 |---|---|
@@ -222,7 +226,62 @@ Per ciascuna, nel modulo *Aggiungi*:
 
 Nelle impostazioni del broker vanno indirizzo, porta 1883 e le credenziali di `.env`.
 Sull'indirizzo vedi la sezione qui sotto: ce n'è uno solo che va bene sia dentro che fuori
-casa.
+casa. **Queste restano per telefono anche con il configuratore**, ed è per forza: sono
+quello che serve per *ricevere* il registro, quindi non possono arrivare dentro il registro.
+
+## Il configuratore web
+
+Una pagina da cui si configurano i dispositivi **una volta sola per tutta la casa**. Quello
+che si salva finisce sul broker come messaggio ritenuto, e ogni app che si collega lo trova
+— adesso, o fra tre settimane su un telefono che ancora non esiste.
+
+```bash
+docker compose up -d configuratore     # poi http://<questa macchina>:8080
+```
+
+La porta è `CONFIGURATORE_PORT` in `.env`, 8080 di default. La pagina chiede le credenziali
+del broker, le stesse dell'app: chi non le ha non entra e non scrive. Restano in memoria per
+la durata della scheda, non vengono salvate.
+
+Non c'è nessun server applicativo e nessun database: la pagina è statica e parla direttamente
+con Mosquitto in **websocket sulla 9001**, con lo stesso `password_file` del 1883. Il client
+MQTT sta dentro l'immagine e non su una CDN — lo stack deve funzionare con la linea di casa
+giù, che è esattamente quando si va a guardare perché le prese non rispondono.
+
+### Il registro
+
+| topic | chi scrive | contenuto |
+|---|---|---|
+| `casa/registro/dispositivi` | il configuratore | JSON ritenuto: l'elenco completo dei dispositivi, con `schema` e `revisione` |
+
+Un documento solo e non un topic per dispositivo, per via delle **cancellazioni**: con un
+topic ciascuno, una presa tolta mentre un telefono è spento non verrebbe mai più nominata e
+su quel telefono resterebbe per sempre. Il documento unico dice sempre l'insieme completo,
+quindi "non c'è più" si legge dalla sua assenza.
+
+Il registro vive sotto lo stesso prefisso dei dispositivi che descrive, e il prefisso è
+configurabile da entrambe le parti: è così che sullo stesso broker convivono `casa/` e
+`ufficio/`, ognuno con i suoi dispositivi e il suo registro. Ne discende un nome riservato —
+dentro un prefisso **nessuna presa può chiamarsi `registro`**.
+
+Il formato e le regole di rifiuto stanno in [`configuratore/SCHEMA.md`](configuratore/SCHEMA.md).
+La regola sotto tutte è quella che l'app applica già ai payload di disponibilità: da un
+valore che non si è capito non si deduce niente. Un registro incomprensibile non è un
+registro vuoto.
+
+Per cancellarlo:
+
+```bash
+mosquitto_pub -h localhost -u casa -P ... -t casa/registro/dispositivi -r -n
+```
+
+Le app **smettono di seguirlo e tengono i dispositivi che hanno**. La lettura opposta —
+registro cancellato uguale casa senza dispositivi — farebbe di un comando solo un disastro.
+
+Il registro non tocca `dispositivi.yaml`: quello dice al *ponte* con chi parlare e contiene
+le chiavi locali, il registro dice alle *app* cosa mostrare. Rinominare una presa di qua
+senza rinominarla di là dà un bel nome che punta a topic che non esistono; l'app se ne
+accorge e lo dice in `/state` — *«non è mai arrivato niente sul topic …»*.
 
 ## Da fuori: WireGuard
 
@@ -280,6 +339,18 @@ ssh pi@casa 'cd bridge && bash crea-password-mqtt.sh && docker compose up -d'
 Poi si sposta l'inoltro del Google Wifi sul nuovo indirizzo e si cambia il broker nell'app.
 Il ponte deve restare in `network_mode: host` e sulla stessa LAN delle prese: gli annunci
 in broadcast non attraversano né un bridge Docker né un router.
+
+Il configuratore viaggia con il resto, è un servizio dello stesso `compose.yml`. Due cose da
+verificare al primo avvio là sopra, e nessuna delle due lo riguarda:
+
+- **Sistema a 64 bit.** Mosquitto, nginx e `python:3.12-slim` sono multi-arch e non danno
+  problemi, ma il ponte si ricostruisce sul posto e `cryptography` ha le ruote precompilate
+  per `aarch64` e non per l'ARM a 32 bit, dove finirebbe a compilare Rust
+- **`PUID`/`PGID`**: l'utente predefinito è di norma 1000 e i default reggono, ma conviene
+  un `id` prima di copiare i volumi
+
+Con una macchina sempre accesa cade anche il limite che pesava di più sul registro: un
+telefono nuovo lo trova a qualunque ora, invece che solo quando il PC era acceso.
 
 ## Test
 

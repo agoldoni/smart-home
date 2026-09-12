@@ -3,6 +3,9 @@ package it.agoldoni.smarthome.ui.devices
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import it.agoldoni.smarthome.data.DeviceRepository
+import it.agoldoni.smarthome.data.registry.RegistryProposal
+import it.agoldoni.smarthome.data.registry.RegistryStatus
+import it.agoldoni.smarthome.data.registry.RegistrySync
 import it.agoldoni.smarthome.diagnostics.DebugBridge
 import it.agoldoni.smarthome.diagnostics.DebugStatus
 import it.agoldoni.smarthome.domain.driver.DeviceCommand
@@ -35,7 +38,18 @@ data class DeviceListUiState(
 class DeviceListViewModel(
     repository: DeviceRepository,
     private val driver: DeviceDriver,
+    private val registry: RegistrySync,
 ) : ViewModel() {
+
+    /** Segue un registro: da qui non si aggiungono dispositivi. */
+    val registryStatus: StateFlow<RegistryStatus> = registry.status
+
+    /** Il primo registro aspetta un si' prima di togliere qualcosa. */
+    val proposal: StateFlow<RegistryProposal?> = registry.proposal
+
+    fun acceptRegistry() = registry.confirm()
+
+    fun refuseRegistry() = registry.dismiss()
 
     private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 4)
 

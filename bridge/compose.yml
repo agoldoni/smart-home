@@ -11,6 +11,10 @@ services:
     user: "${PUID:-1000}:${PGID:-1000}"
     ports:
       - "1883:1883"
+      # MQTT su websocket, per il configuratore web. Fissa come il 1883 e non in
+      # .env: e' una porta interna alla rete di casa, non una che si apre sul
+      # router.
+      - "9001:9001"
     volumes:
       - ./mosquitto/config/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
       - ./mosquitto/config/passwd:/mosquitto/config/passwd:ro
@@ -47,6 +51,16 @@ services:
     depends_on:
       broker:
         condition: service_healthy
+
+  configuratore:
+    build: ./configuratore
+    image: smart-home/configuratore:latest
+    container_name: sh-configuratore
+    restart: unless-stopped
+    # Niente depends_on sul broker: e' il browser a parlargli, non questo
+    # container. A broker spento la pagina si apre e lo dice.
+    ports:
+      - "${CONFIGURATORE_PORT:-8080}:80"
 
   # Avvio opzionale:  docker compose --profile vpn up -d
   wireguard:
