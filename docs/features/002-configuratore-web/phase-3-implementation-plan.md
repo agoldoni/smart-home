@@ -1,10 +1,72 @@
 # Configuratore web e registro condiviso dei dispositivi — Implementation Plan
 
-**Stato:** Completo — nessuna domanda aperta, in attesa di approvazione
+**Stato:** Implementato e committato (`57643cb`) — restano tre verifiche, vedi *Stato di avanzamento*
 **Autore:** Alberto Goldoni
 **Data:** 12 settembre 2026
 **Versione:** 1.0
 **Feature:** `002-configuratore-web` · [Fase 1](phase-1-requirements.md) · [Fase 2](phase-2-analysis.md)
+
+---
+
+## 0. Stato di avanzamento
+
+**Aggiornato: 12 settembre 2026, fine sessione.**
+
+Implementazione completa dei task **T-01 → T-18**, in un commit solo (`57643cb`, 48 file).
+`./gradlew testDebugUnitTest assembleDebug lintDebug` passa: **66 test, 0 falliti**, lint
+pulito. La versione è stata alzata a **1.1.0 (versionCode 9)**.
+
+### In funzione adesso
+
+| Dove | Stato |
+|---|---|
+| Broker di casa | listener websockets **9001** attivo, autenticato come il 1883 |
+| `sh-configuratore` | in piedi, **http://192.168.86.45:8080** |
+| Registro sul broker | `casa/registro/dispositivi`, **7 prese, revisione 8** |
+| Telefono (build debug 1.1.0) | segue il registro, 7 dispositivi **adottati** con i loro id |
+
+### Verificato, e come
+
+- **Il listener websocket**, su un broker di prova separato: handshake `101 Switching
+  Protocols` con protocollo `mqtt`, e l'autenticazione vale anche lì — `rc=5` senza
+  credenziali e con quelle sbagliate, `rc=0` con quelle giuste
+- **I topic contro il ponte vivo**: letti `casa/#` dal broker di casa, **tutti e 21 i topic
+  delle sette prese combaciano carattere per carattere** con quelli che genera il modello. I
+  quattro campi JSON esistono nei payload veri
+- **La pagina in Chromium headless**, sette passi: si apre, rifiuta le credenziali sbagliate
+  dicendolo, si collega, il modello compila gli otto campi, la wildcard viene bloccata, il
+  salvataggio pubblica, la scheda compare
+- **Un test di contratto fra i due componenti** (non era nel piano): `tools/genera-registro.mjs`
+  scrive il documento col codice vero della web app, `RegistryContractTest` lo rilegge col
+  parser dell'app. Fixture committato, rigenerazione riproducibile
+- **TC-13 su hardware vero**: l'aggiornamento è avvenuto su un telefono che aveva già
+  dispositivi registrati a mano. `sqlite_sequence` è rimasto a **14** con sette righe che
+  finiscono a 14 — sette inserimenti l'avrebbero portato a 21: sono state **adottate**.
+  `identity_hash` combacia con `schemas/5.json`
+- **TC-01 su hardware vero**: ripubblicato lo stesso registro come revisione 8, la revisione
+  applicata è salita da 7 a 8 e **il database non è stato toccato** — stesse righe, stessi
+  id, contatore fermo. È la sentinella del rischio R-1
+
+> Una trappola incontrata e da ricordare: al primo tentativo di TC-01 il database risultava
+> intatto e sembrava un successo, ma il telefono era in **Doze** e il messaggio non era mai
+> arrivato. Un test che verifica un'assenza non vale niente finché non si dimostra che il
+> soggetto era sveglio.
+
+### Da finire
+
+1. **L'interfaccia dell'app non è mai stata guardata.** Il telefono era bloccato e non si
+   poteva sbloccare: il modulo in sola lettura, il "+" che sparisce dalla barra e la sezione
+   Registro in Impostazioni sono verificati solo dal fatto che compilano. **È la prima cosa
+   da fare**, e basta sbloccare il telefono
+2. **La finestra di conferma della prima applicazione non è mai comparsa**, e correttamente:
+   l'adozione ha azzerato le rimozioni, quindi non c'era niente da chiedere. Quel percorso
+   resta coperto solo dai test unitari. Per provarlo davvero serve un telefono con un
+   dispositivo che il registro **non** contiene
+3. **TC-10 è a metà**: manca il secondo telefono, e la cancellazione fatta mentre uno dei due
+   è spento — che è poi la ragione per cui il registro è un documento unico invece di un
+   topic per dispositivo
+
+Niente di tutto questo blocca l'uso: la feature funziona ed è in funzione.
 
 ---
 
