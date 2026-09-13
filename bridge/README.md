@@ -330,22 +330,51 @@ parte, il posto naturale è questo stack.
 ## Dove gira
 
 Sul Raspberry `rpi4-smarthome`, `192.168.86.2`, in `~/projects/smart-home/bridge` —
-traslocato dal PC il 13 settembre 2026. È la ragione per cui è tutto in Docker: la copia è
-un `rsync` e le immagini si ricostruiscono sul posto per arm64.
+traslocato dal PC il 13 settembre 2026.
+
+**Là sopra non si costruisce niente e non ci sono i sorgenti.** Le immagini si costruiscono
+sulla macchina di sviluppo, per `linux/arm64`, e arrivano già pronte:
 
 ```bash
-# aggiornare il Pi dopo una modifica fatta qui
-rsync -a --exclude '__pycache__/' \
-      --exclude 'stato/' --exclude 'mosquitto/data/' --exclude 'wireguard/' \
-      bridge/ raspberry:projects/smart-home/bridge/
-ssh raspberry 'cd ~/projects/smart-home/bridge && docker compose up -d --build'
+./devops/deploy.sh
 ```
 
-**Le tre esclusioni non sono un dettaglio.** Sono i dati vivi del Pi — l'archivio dei
-consumi, i messaggi ritenuti col registro, i peer della VPN — e le copie rimaste sul PC
-sono ferme al giorno del trasloco. Un `rsync` senza esclusioni le rispedirebbe indietro,
-cancellando tutto quello che il Pi ha scritto da allora. Nel trasloco andavano copiate, da
-allora in poi mai più.
+Lo script fa tre cose, e ognuna risolve un problema preciso:
+
+- **costruisce per arm64 con `buildx`** — il PC è `x86_64` e il Pi no. Un'immagine costruita
+  in modo normale là sopra non parte proprio: `exec format error`, e non si capisce subito
+  perché;
+- **tagga con lo SHA del commit** e lo stampa dentro l'immagine come label OCI. Il Pi non è
+  un checkout git e non potrebbe dirlo in nessun altro modo: da qui in poi
+  `docker image inspect` risponde a *«quale revisione sta girando?»*;
+- **trasferisce con `docker save | ssh docker load`**, senza registro. Il consumatore è uno
+  solo: un registro chiederebbe di toccare `daemon.json` sul Pi e pretenderebbe questa
+  macchina accesa perché il Pi possa ripartire pulito.
+
+Il tag finisce anche nel `.env` del Pi, così un `docker compose up -d` dato a mano là sopra
+riparte con le stesse immagini invece di lamentarsi di una variabile che non c'è.
+
+### Cosa c'è sul Pi
+
+Quattro file, e nient'altro:
+
+| File | Perché |
+|---|---|
+| `compose.yml` | descrive cosa gira. Lo aggiorna `deploy.sh` |
+| `.env` | credenziali del broker, porte, `IMAGE_TAG` |
+| `mosquitto/config/passwd` | segreto, generato, diverso per installazione |
+| `dispositivi.yaml` | le chiavi locali delle prese |
+
+Tutto il resto è dentro le immagini — `mosquitto.conf` compreso, che è codice e passa da una
+build come il resto — oppure dentro **volumi nominati**: `broker-dati` per i messaggi
+ritenuti, `ponte-stato` per lo storico dei consumi, `wireguard-config` per le chiavi della
+VPN.
+
+Che i dati stiano nei volumi e non in cartelle del progetto **non è ordine, è sicurezza**:
+finché erano directory dentro `bridge/`, un `rsync` senza le esclusioni giuste le
+sovrascriveva con le copie ferme al giorno del trasloco — cancellando il registro ritenuto e
+le chiavi della VPN. Adesso non c'è più niente da escludere, perché non c'è più niente da
+sovrascrivere.
 
 Il ponte resta in `network_mode: host` e sulla stessa LAN delle prese: gli annunci in
 broadcast non attraversano né un bridge Docker né un router.
