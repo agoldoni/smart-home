@@ -3,7 +3,7 @@ name: smart-home
 services:
 
   broker:
-    image: eclipse-mosquitto:2
+    image: "smart-home/broker:${IMAGE_TAG:?manca IMAGE_TAG in .env — lo scrive devops/deploy.sh}"
     container_name: sh-broker
     restart: unless-stopped
     # Da root mosquitto scende a uid 1883 e non leggerebbe piu' il file di
@@ -16,9 +16,12 @@ services:
       # router.
       - "9001:9001"
     volumes:
-      - ./mosquitto/config/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      # Solo il segreto resta un file sul disco del Pi: la configurazione e'
+      # dentro l'immagine, i dati in un volume. Cosi' non c'e' piu' nessuna
+      # directory del progetto che un rsync distratto possa sovrascrivere —
+      # ed e' successo di sfiorarlo.
       - ./mosquitto/config/passwd:/mosquitto/config/passwd:ro
-      - ./mosquitto/data:/mosquitto/data
+      - broker-dati:/mosquitto/data
     healthcheck:
       test: ["CMD", "mosquitto_sub", "-h", "localhost", "-t", "$$SYS/broker/uptime", "-C", "1", "-W", "3", "-u", "${MQTT_USER}", "-P", "${MQTT_PASS}"]
       interval: 30s
@@ -50,7 +53,7 @@ services:
       LIVELLO_LOG: ${LIVELLO_LOG:-INFO}
     volumes:
       - ./dispositivi.yaml:/app/dispositivi.yaml:ro
-      - ./stato:/app/stato
+      - ponte-stato:/app/stato
     depends_on:
       broker:
         condition: service_healthy
@@ -88,7 +91,15 @@ services:
     ports:
       - "${WG_PORT:-51820}:51820/udp"
     volumes:
-      - ./wireguard:/config
+      - wireguard-config:/config
       - /lib/modules:/lib/modules:ro
     sysctls:
       - net.ipv4.conf.all.src_valid_mark=1
+
+# I dati vivono qui, non in cartelle del progetto: l'archivio del broker con i
+# messaggi ritenuti, lo storico dei consumi, e le chiavi della VPN — quelle
+# ultime sono la ragione per cui questi volumi non si cancellano a cuor leggero.
+volumes:
+  broker-dati:
+  ponte-stato:
+  wireguard-config:

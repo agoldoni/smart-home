@@ -18,7 +18,7 @@ cd "$(dirname "$0")/.."
 
 REMOTO="${REMOTO:-raspberry}"
 DESTINAZIONE="${DESTINAZIONE:-projects/smart-home/bridge}"
-SERVIZI="configuratore tuya-mqtt"
+SERVIZI="broker configuratore tuya-mqtt"
 
 if [[ -n "$(git status --porcelain)" ]]; then
   echo "ATTENZIONE: albero di lavoro sporco. Il tag direbbe una revisione che non"
