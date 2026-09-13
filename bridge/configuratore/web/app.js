@@ -4,7 +4,7 @@
 // ritenuto sul broker, e tutto quello che cambia lo riscrive li'. Chiudere la
 // pagina non perde niente, e riaprirla non richiede di ricordarsi niente.
 
-import { CAMPI, TIPI, vuoto } from './campi.js';
+import { CAMPI, TIPI, nuovoUuid, vuoto } from './campi.js';
 import { MODELLI, daModello } from './modelli.js';
 import { documento, leggiRegistro, topicRegistro, valida } from './registro.js';
 
@@ -184,7 +184,7 @@ function elimina(uuid) {
 function duplica(uuid) {
   const d = stato.dispositivi.find((x) => x.uuid === uuid);
   if (!d) return;
-  apriModulo({ ...d, uuid: crypto.randomUUID(), nome: `${d.nome}-copia` });
+  apriModulo({ ...d, uuid: nuovoUuid(), nome: `${d.nome}-copia` });
 }
 
 // -- modulo -------------------------------------------------------------

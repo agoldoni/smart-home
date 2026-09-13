@@ -118,8 +118,25 @@ export const CAMPI = [
 /** Tutti i campi in fila, senza le sezioni. */
 export const TUTTI = CAMPI.flatMap((s) => s.campi);
 
+/**
+ * Un uuid v4, anche fuori dai contesti sicuri.
+ *
+ * `crypto.randomUUID()` esiste solo in contesto sicuro: https, oppure
+ * localhost. La pagina si apre per indirizzo — `http://192.168.86.2:8080` — e
+ * li' non c'e'. `getRandomValues()` invece c'e' sempre, e basta mettere a posto
+ * i quattro bit di versione e i due di variante.
+ */
+export function nuovoUuid() {
+  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  const b = crypto.getRandomValues(new Uint8Array(16));
+  b[6] = (b[6] & 0x0f) | 0x40;
+  b[8] = (b[8] & 0x3f) | 0x80;
+  const e = [...b].map((x) => x.toString(16).padStart(2, '0')).join('');
+  return `${e.slice(0, 8)}-${e.slice(8, 12)}-${e.slice(12, 16)}-${e.slice(16, 20)}-${e.slice(20)}`;
+}
+
 export function vuoto() {
-  const d = { uuid: crypto.randomUUID(), tipo: 'SWITCH' };
+  const d = { uuid: nuovoUuid(), tipo: 'SWITCH' };
   for (const campo of TUTTI) {
     d[campo.chiave] = campo.predefinito !== undefined ? campo.predefinito : '';
   }
