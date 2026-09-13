@@ -1,0 +1,159 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 6,
+    "identityHash": "4d5c592887f6093935536f43662abcc3",
+    "entities": [
+      {
+        "tableName": "devices",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `uuid` TEXT NOT NULL, `name` TEXT NOT NULL, `room` TEXT NOT NULL, `kind` TEXT NOT NULL, `stateTopic` TEXT NOT NULL, `commandTopic` TEXT NOT NULL, `payloadOn` TEXT NOT NULL, `payloadOff` TEXT NOT NULL, `stateJsonKey` TEXT, `powerJsonKey` TEXT, `energyTopic` TEXT, `energyTodayJsonKey` TEXT, `energyMonthJsonKey` TEXT, `availabilityTopic` TEXT, `payloadAvailable` TEXT NOT NULL, `payloadUnavailable` TEXT NOT NULL, `levelStateTopic` TEXT, `levelCommandTopic` TEXT, `levelJsonKey` TEXT, `levelMax` INTEGER NOT NULL, `qos` INTEGER NOT NULL, `retained` INTEGER NOT NULL, `position` INTEGER)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "uuid",
+            "columnName": "uuid",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "room",
+            "columnName": "room",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kind",
+            "columnName": "kind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "stateTopic",
+            "columnName": "stateTopic",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "commandTopic",
+            "columnName": "commandTopic",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "payloadOn",
+            "columnName": "payloadOn",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "payloadOff",
+            "columnName": "payloadOff",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "stateJsonKey",
+            "columnName": "stateJsonKey",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "powerJsonKey",
+            "columnName": "powerJsonKey",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "energyTopic",
+            "columnName": "energyTopic",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "energyTodayJsonKey",
+            "columnName": "energyTodayJsonKey",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "energyMonthJsonKey",
+            "columnName": "energyMonthJsonKey",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "availabilityTopic",
+            "columnName": "availabilityTopic",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "payloadAvailable",
+            "columnName": "payloadAvailable",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "payloadUnavailable",
+            "columnName": "payloadUnavailable",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "levelStateTopic",
+            "columnName": "levelStateTopic",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "levelCommandTopic",
+            "columnName": "levelCommandTopic",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "levelJsonKey",
+            "columnName": "levelJsonKey",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "levelMax",
+            "columnName": "levelMax",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "qos",
+            "columnName": "qos",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "retained",
+            "columnName": "retained",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "position",
+            "columnName": "position",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '4d5c592887f6093935536f43662abcc3')"
+    ]
+  }
+}

@@ -14,6 +14,29 @@ import { MODELLI, daModello } from '../../bridge/configuratore/web/modelli.js';
 import { documento, valida } from '../../bridge/configuratore/web/registro.js';
 import { writeFileSync } from 'node:fs';
 
+// Con `--senza-posizioni` esce il documento com'era prima della feature 004:
+// serve a provare che un registro vecchio ordina ancora per nome, che e' il
+// comportamento promesso a chi non riordina niente.
+const SENZA_POSIZIONI = process.argv.includes('--senza-posizioni');
+
+/**
+ * L'ordine dell'elenco sullo schermo, e **non e' quello alfabetico**.
+ *
+ * E' deliberato: se le posizioni non arrivassero o non venissero lette, l'elenco
+ * tornerebbe in ordine di nome — cioe' `alfa, bravo, charlie, ...` — e la
+ * differenza si vede in un istante invece di passare inosservata. In cima c'e'
+ * il nome lungo, che e' anche quello da guardare per vedere dove taglia.
+ */
+const ORDINE = [
+  'golf-nome-lungo-per-vedere-dove-taglia',
+  'echo-regolabile',
+  'alfa',
+  'foxtrot-sensore',
+  'delta',
+  'charlie',
+  'bravo',
+];
+
 const PREFISSO = 'dev';
 const ponte = MODELLI.find((m) => m.id === 'ponte');
 
@@ -58,12 +81,24 @@ const dispositivi = ELENCO.map((voce, i) => {
   // uuid deterministici: rigenerare non deve produrre dispositivi nuovi agli
   // occhi dell'app, che li riconosce per uuid.
   d.uuid = `dee00000-0000-4000-8000-00000000000${i + 1}`;
+  if (!SENZA_POSIZIONI) {
+    const posto = ORDINE.indexOf(voce.nome);
+    if (posto < 0) throw new Error(`${voce.nome}: manca da ORDINE`);
+    d.posizione = posto;
+  }
   const errori = valida(d);
   if (Object.keys(errori).length) throw new Error(`${voce.nome}: ${JSON.stringify(errori)}`);
   return d;
 });
 
-const doc = JSON.parse(documento(dispositivi, 1));
+// Revisione 2 e non piu' 1: la 1 e' quella che i telefoni di sviluppo hanno gia'
+// applicato prima che esistessero le posizioni, e un documento di pari revisione
+// viene ignorato senza rumore — sembrerebbe che l'ordine non arrivi. Il broker di
+// sviluppo non ha persistenza, quindi qui non si perde niente ad alzarla.
+const doc = JSON.parse(documento(dispositivi, 2));
 doc.aggiornato = '2026-09-13T20:00:00+02:00';
 writeFileSync(process.argv[2] ?? 'registro-dev.json', JSON.stringify(doc, null, 1) + '\n');
-console.log(`${dispositivi.length} dispositivi di sviluppo, nessun errore di validazione`);
+console.log(
+  `${dispositivi.length} dispositivi di sviluppo, nessun errore di validazione` +
+    (SENZA_POSIZIONI ? ' — senza posizioni, come un registro di prima della 004' : ''),
+);

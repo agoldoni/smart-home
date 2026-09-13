@@ -4,6 +4,10 @@ import { MODELLI, daModello } from '../bridge/configuratore/web/modelli.js';
 import { documento, valida } from '../bridge/configuratore/web/registro.js';
 import { writeFileSync } from 'node:fs';
 
+// L'ordine di questo elenco e' anche l'ordine delle posizioni, e **non e'
+// alfabetico di proposito**: e' l'unico modo perche' il test del contratto
+// possa distinguere un lettore che legge le posizioni da uno che ordina per
+// nome e sembra funzionare.
 const PRESE = ['boiler', 'depuratore', 'lavastoviglie', 'lavatrice-nuova',
                'jacopo-studio', 'frigorifero', 'pompa'];
 const ponte = MODELLI.find((m) => m.id === 'ponte');
@@ -12,6 +16,7 @@ const dispositivi = PRESE.map((nome, i) => {
   const d = daModello(ponte, nome, 'casa');
   // uuid deterministici: il file finisce in git e deve avere una diff stabile.
   d.uuid = `0000000${i + 1}-0000-4000-8000-00000000000${i + 1}`;
+  d.posizione = i;
   const errori = valida(d);
   if (Object.keys(errori).length) throw new Error(`${nome}: ${JSON.stringify(errori)}`);
   return d;

@@ -59,6 +59,69 @@ export function valida(d) {
   return errori;
 }
 
+/**
+ * Il posto nell'elenco, oppure null. Le regole di SCHEMA.md, in un punto solo.
+ *
+ * Mai zero per ripiego: zero e' il **primo** posto, e un valore che non si e'
+ * capito non puo' portare un dispositivo in cima alla casa. Assente, negativo,
+ * con la virgola o scritto come stringa valgono tutti "nessuno lo ha collocato".
+ */
+export function posizione(d) {
+  const v = d ? d.posizione : null;
+  if (typeof v !== 'number' || !Number.isInteger(v) || v < 0) return null;
+  return v;
+}
+
+/**
+ * L'ordine dichiarato dal registro: prima chi ha un posto, poi gli altri, e a
+ * parita' per nome.
+ *
+ * E' la stessa regola dell'`ORDER BY` dell'app, e devono restare la stessa cosa:
+ * due telefoni che ordinano diversamente sono due case diverse. Lo spareggio sul
+ * nome usa `localeCompare` mentre l'app usa `COLLATE NOCASE`, e i due divergono
+ * solo su nomi che differiscono per accento o maiuscola — il caso in cui lo
+ * spareggio serve davvero e' quello di due posti uguali, che chi scrive non
+ * produce mai.
+ */
+export function ordina(dispositivi) {
+  return [...dispositivi].sort((a, b) => {
+    const pa = posizione(a);
+    const pb = posizione(b);
+    if (pa !== pb) {
+      if (pa === null) return 1;
+      if (pb === null) return -1;
+      return pa - pb;
+    }
+    return String(a.nome ?? '').localeCompare(String(b.nome ?? ''));
+  });
+}
+
+/**
+ * Rinumera tutti da zero, nell'ordine in cui stanno.
+ *
+ * Si usa **solo dopo un riordino**, ed e' il momento in cui anche chi non aveva
+ * un posto ne prende uno: trascinare una riga vuol dire decidere l'ordine di
+ * tutto l'elenco, non solo di quella. Fuori di qui le posizioni non si toccano.
+ */
+export function rinumera(dispositivi) {
+  return dispositivi.map((d, i) => ({ ...d, posizione: i }));
+}
+
+/**
+ * Il posto per un dispositivo nuovo: in fondo, ma **solo se qualcun altro ne ha
+ * gia' uno**.
+ *
+ * La condizione e' tutta la regola. In un registro dove nessuno ha ancora
+ * riordinato, dare `posizione: 0` al primo aggiunto lo farebbe schizzare in cima
+ * a tutti gli altri — che sono senza posto, quindi in fondo per definizione. Un
+ * campo invisibile che riordina la casa di sorpresa e' il difetto peggiore che
+ * questo campo possa avere.
+ */
+export function prossimaPosizione(dispositivi) {
+  const posti = dispositivi.map(posizione).filter((p) => p !== null);
+  return posti.length ? Math.max(...posti) + 1 : null;
+}
+
 function serializza(d) {
   const testo = (k, predefinito = '') => {
     const v = String(d[k] ?? '').trim();
@@ -92,6 +155,11 @@ function serializza(d) {
     livello_max: Math.min(65535, Math.max(1, Number(d.livello_max) || 100)),
     qos: Math.min(2, Math.max(0, Number(d.qos) || 0)),
     ritenuto: Boolean(d.ritenuto),
+    // Non e' un campo del modulo, ma va scritto qui lo stesso: questo oggetto e'
+    // costruito da una lista chiusa di chiavi, e cio' che non compare in questa
+    // lista non viene ripubblicato. Dimenticarlo cancellerebbe l'ordine della
+    // casa al primo salvataggio di un dispositivo qualsiasi.
+    posizione: posizione(d),
   };
   for (const k of NULLABILI) if (fuori[k] === '') fuori[k] = null;
   return fuori;

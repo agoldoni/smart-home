@@ -6,7 +6,10 @@
 
 import { CAMPI, TIPI, nuovoUuid, vuoto } from './campi.js';
 import { MODELLI, daModello } from './modelli.js';
-import { documento, leggiRegistro, topicRegistro, valida } from './registro.js';
+import {
+  documento, leggiRegistro, ordina, posizione, prossimaPosizione, rinumera,
+  topicRegistro, valida,
+} from './registro.js';
 
 const stato = {
   client: null,
@@ -21,7 +24,23 @@ const stato = {
   modifica: null,
   revisioneBase: null,
   errori: {},
+  // Il riordino: quale riga e' sotto il dito, il timer della pubblicazione che
+  // sta per partire, e da quale revisione quel riordino era partito.
+  trascinando: null,
+  ridisegnaDopo: false,
+  attesaOrdine: null,
+  ordineBase: null,
 };
+
+/**
+ * Quanto si aspetta prima di pubblicare un ordine nuovo.
+ *
+ * Il riordino si pubblica da se', senza un pulsante: ma cinque tocchi sulla
+ * freccia sono un solo spostamento agli occhi di chi li fa, e sarebbero cinque
+ * documenti sul broker e cinque riletture su ogni telefono. L'attesa li
+ * accorpa, e resta sotto la soglia in cui si smette di sembrare immediato.
+ */
+const RITARDO_ORDINE = 600;
 
 const $ = (id) => document.getElementById(id);
 
@@ -102,6 +121,22 @@ function collega(evento) {
   });
 }
 
+/**
+ * Ridisegna, ma non mentre il dito e' giu'.
+ *
+ * Un registro che arriva a meta' trascinamento ricreerebbe la riga sotto il
+ * puntatore, e il gesto morirebbe li'. Si segna che c'e' da ridisegnare e lo si
+ * fa appena il dito si alza — ed e' proprio durante un riordino che qualcun
+ * altro ha piu' motivo di stare scrivendo.
+ */
+function ridisegna() {
+  if (stato.trascinando) {
+    stato.ridisegnaDopo = true;
+    return;
+  }
+  disegna();
+}
+
 function arrivato(payload) {
   const letto = leggiRegistro(payload);
 
@@ -111,15 +146,21 @@ function arrivato(payload) {
     stato.revisione = 0;
     stato.scartati = [];
     avviso('registro', 'Nessun registro su questo topic. Il primo salvataggio lo crea.');
-    return disegna();
+    return ridisegna();
   }
   if (letto.stato === 'rifiutato') {
     avviso('registro', `Il documento sul broker non si legge (${letto.motivo}). Salvare lo riscriverebbe da capo.`, 'errore');
-    return disegna();
+    return ridisegna();
   }
 
   const eraAperto = stato.modifica !== null;
   const cambiataSottoIlNaso = eraAperto && letto.revisione !== stato.revisioneBase;
+  // Un riordino non ancora partito, superato da una revisione di qualcun altro,
+  // si butta. Pubblicarlo lo stesso riscriverebbe **tutte** le righe sopra il
+  // lavoro appena arrivato: fra le scritture possibili, un riordino e' quella
+  // che ha piu' da perdere.
+  const ordinePerso = stato.attesaOrdine !== null && letto.revisione !== stato.ordineBase;
+  if (ordinePerso) annullaOrdine();
 
   stato.esiste = true;
   stato.dispositivi = letto.dispositivi;
@@ -133,6 +174,13 @@ function arrivato(payload) {
         'Chiudi e riapri il dispositivo per ripartire da quello che c’è adesso.',
       'errore',
     );
+  } else if (ordinePerso) {
+    avviso(
+      'registro',
+      `Qualcun altro ha salvato nel frattempo (ora è la revisione ${letto.revisione}): ` +
+        'il riordino non è partito. Rifallo su quello che c’è adesso.',
+      'errore',
+    );
   } else {
     if (!eraAperto) stato.revisioneBase = letto.revisione;
     avviso(
@@ -142,14 +190,23 @@ function arrivato(payload) {
       letto.scartati.length ? 'errore' : 'ok',
     );
   }
-  disegna();
+  ridisegna();
 }
 
 // -- scrittura ----------------------------------------------------------
 
-function pubblica(dispositivi) {
+/**
+ * Scrive il registro.
+ *
+ * [base] e' la revisione da cui si stava partendo, per chi la sa: se nel
+ * frattempo ne e' arrivata un'altra, non si sovrascrive. Prima era una
+ * condizione scritta qui dentro che guardava `stato.modifica`, cioe' valeva
+ * **solo a modulo aperto** — e un riordino non apre nessun modulo, pur essendo
+ * la scrittura che tocca tutte le righe insieme.
+ */
+function pubblica(dispositivi, base = null) {
   if (!stato.client) return avviso('registro', 'Non sei collegato.', 'errore');
-  if (stato.modifica && stato.revisione !== stato.revisioneBase) {
+  if (base !== null && stato.revisione !== base) {
     return avviso('registro', 'Il registro è cambiato nel frattempo: ricarica prima di sovrascrivere.', 'errore');
   }
   const prossima = stato.revisione + 1;
@@ -169,8 +226,13 @@ function salva() {
   stato.errori = valida(d);
   if (Object.keys(stato.errori).length) return disegnaModulo();
 
+  const esistente = stato.dispositivi.find((x) => x.uuid === d.uuid);
   const altri = stato.dispositivi.filter((x) => x.uuid !== d.uuid);
-  pubblica([...altri, d].sort((a, b) => String(a.nome).localeCompare(String(b.nome))));
+  // La posizione non si digita: chi c'e' gia' tiene la sua, e chi e' nuovo — un
+  // duplicato compreso, che nuovo lo e' — va in fondo, ma solo se qualcun altro
+  // ha gia' un posto. Vedi SCHEMA.md, *Chi assegna le posizioni*.
+  d.posizione = esistente ? posizione(esistente) : prossimaPosizione(stato.dispositivi);
+  pubblica(ordina([...altri, d]), stato.revisioneBase);
   chiudiModulo();
 }
 
@@ -185,6 +247,119 @@ function duplica(uuid) {
   const d = stato.dispositivi.find((x) => x.uuid === uuid);
   if (!d) return;
   apriModulo({ ...d, uuid: nuovoUuid(), nome: `${d.nome}-copia` });
+}
+
+// -- ordine -------------------------------------------------------------
+
+/**
+ * Un ordine nuovo: si vede subito, si pubblica fra un attimo.
+ *
+ * L'elenco si riordina in locale prima che il broker abbia visto niente —
+ * aspettare il giro completo farebbe sembrare lento un gesto che e' istantaneo.
+ * Il documento vero parte dopo [RITARDO_ORDINE], cosi' piu' spostamenti di
+ * seguito diventano una pubblicazione sola.
+ */
+function riordina(lista) {
+  stato.dispositivi = rinumera(lista);
+  if (stato.attesaOrdine === null) stato.ordineBase = stato.revisione;
+  clearTimeout(stato.attesaOrdine);
+  stato.attesaOrdine = setTimeout(() => {
+    const base = stato.ordineBase;
+    annullaOrdine();
+    pubblica(stato.dispositivi, base);
+  }, RITARDO_ORDINE);
+  ridisegna();
+}
+
+function annullaOrdine() {
+  clearTimeout(stato.attesaOrdine);
+  stato.attesaOrdine = null;
+  stato.ordineBase = null;
+}
+
+/** Su e giu' di un posto. E' la strada di chi non puo' trascinare. */
+function sposta(uuid, passo) {
+  const lista = ordina(stato.dispositivi);
+  const i = lista.findIndex((d) => d.uuid === uuid);
+  const j = i + passo;
+  if (i < 0 || j < 0 || j >= lista.length) return;
+  [lista[i], lista[j]] = [lista[j], lista[i]];
+  riordina(lista);
+}
+
+/**
+ * Il trascinamento, con i pointer events e non con il drag-and-drop di HTML5.
+ *
+ * Il drag-and-drop nativo non emette niente sotto un dito, e questa pagina si
+ * apre anche dal telefono. I pointer events coprono mouse, dito e penna con lo
+ * stesso codice; la cattura fa arrivare ogni movimento anche quando il puntatore
+ * esce da dove il gesto e' cominciato, che e' quasi sempre.
+ *
+ * La cattura sta sull'**elenco** e non sulla maniglia, e non e' un'inezia:
+ * spostare una riga vuol dire spostare il nodo che contiene la maniglia, e un
+ * nodo spostato nel DOM **perde la cattura** — il trascinamento si fermava dopo
+ * il primo scambio, con il puntatore che si staccava dalla riga. L'elenco invece
+ * non si muove mai: sono i suoi figli a muoversi.
+ */
+function avviaTrascinamento(evento, uuid, scheda) {
+  if (evento.button) return; // solo il tasto primario
+  evento.preventDefault();
+
+  const lista = $('elenco');
+  lista.setPointerCapture(evento.pointerId);
+  stato.trascinando = uuid;
+  scheda.classList.add('trascinata');
+
+  const muovi = (e) => posizionaTrascinata(lista, scheda, e.clientY);
+  const finisci = () => {
+    lista.removeEventListener('pointermove', muovi);
+    lista.removeEventListener('pointerup', finisci);
+    lista.removeEventListener('pointercancel', finisci);
+    scheda.classList.remove('trascinata');
+    stato.trascinando = null;
+
+    // Un registro arrivato mentre il dito era giu' ha l'ultima parola: si
+    // ridisegna quello che c'e' sul broker e il gesto si perde. E' spiacevole,
+    // ma l'alternativa e' pubblicare un ordine calcolato su un elenco che non
+    // esiste piu'.
+    if (stato.ridisegnaDopo) {
+      stato.ridisegnaDopo = false;
+      avviso('registro', 'È arrivato un registro nuovo durante il trascinamento: l’ordine non è stato cambiato.', 'errore');
+      return disegna();
+    }
+    riordina(ordineDalDom(lista));
+  };
+
+  lista.addEventListener('pointermove', muovi);
+  lista.addEventListener('pointerup', finisci);
+  lista.addEventListener('pointercancel', finisci);
+}
+
+/**
+ * Sposta la riga trascinata fra le altre, guardando dove sta il puntatore.
+ *
+ * Si confronta con la **meta'** di ogni altra scheda, non con il suo bordo: e'
+ * quello che fa scattare lo scambio a meta' strada invece che all'ultimo pixel.
+ * La riga trascinata e' esclusa dal confronto, altrimenti si inseguirebbe.
+ */
+function posizionaTrascinata(lista, scheda, y) {
+  const altre = [...lista.children].filter((n) => n !== scheda && n.classList.contains('scheda'));
+  const dopo = altre.find((n) => {
+    const r = n.getBoundingClientRect();
+    return y < r.top + r.height / 2;
+  });
+  if (dopo) lista.insertBefore(scheda, dopo);
+  else lista.append(scheda);
+}
+
+/** L'ordine come sta adesso sullo schermo, riportato sui dispositivi veri. */
+function ordineDalDom(lista) {
+  const perUuid = new Map(stato.dispositivi.map((d) => [d.uuid, d]));
+  const ordinati = [...lista.children].map((n) => perUuid.get(n.dataset.uuid)).filter(Boolean);
+  // Chi e' comparso nel registro mentre il dito era giu' non sta nel DOM: va in
+  // coda invece di sparire dal documento che stiamo per pubblicare.
+  const visti = new Set(ordinati.map((d) => d.uuid));
+  return [...ordinati, ...stato.dispositivi.filter((d) => !visti.has(d.uuid))];
 }
 
 // -- modulo -------------------------------------------------------------
@@ -275,17 +450,40 @@ function disegnaElenco() {
     return;
   }
 
-  for (const d of [...stato.dispositivi].sort((a, b) => String(a.nome).localeCompare(String(b.nome)))) {
-    lista.append(el('article', { class: 'scheda' },
+  const ordinati = ordina(stato.dispositivi);
+  ordinati.forEach((d, i) => {
+    const nome = d.nome || '(senza nome)';
+    // La maniglia e' nascosta a chi legge lo schermo: il trascinamento e' un
+    // gesto che non sa fare, e al suo posto ci sono le due frecce, che hanno un
+    // nome per esteso invece di una punta disegnata.
+    const scheda = el('article', { class: 'scheda', 'data-uuid': d.uuid },
       el('div', { class: 'riga' },
-        el('strong', {}, d.nome || '(senza nome)'),
+        el('span', { class: 'presa' },
+          el('span', {
+            class: 'maniglia',
+            'aria-hidden': 'true',
+            title: 'Trascina per spostare',
+            onpointerdown: (e) => avviaTrascinamento(e, d.uuid, scheda),
+          }, '⠿'),
+          el('strong', {}, nome)),
         el('span', { class: 'tipo' }, (TIPI.find((t) => t.valore === d.tipo) || {}).etichetta || d.tipo)),
       el('code', {}, d.topic_stato || '(nessun topic di stato)'),
       el('div', { class: 'azioni' },
+        el('button', {
+          class: 'ordine', disabled: i === 0 ? 'disabled' : false,
+          'aria-label': `Sposta ${nome} più in alto`, title: 'Più in alto',
+          onclick: () => sposta(d.uuid, -1),
+        }, '↑'),
+        el('button', {
+          class: 'ordine', disabled: i === ordinati.length - 1 ? 'disabled' : false,
+          'aria-label': `Sposta ${nome} più in basso`, title: 'Più in basso',
+          onclick: () => sposta(d.uuid, 1),
+        }, '↓'),
         el('button', { onclick: () => apriModulo(d) }, 'Modifica'),
         el('button', { onclick: () => duplica(d.uuid) }, 'Duplica'),
-        el('button', { class: 'pericolo', onclick: () => elimina(d.uuid) }, 'Elimina'))));
-  }
+        el('button', { class: 'pericolo', onclick: () => elimina(d.uuid) }, 'Elimina')));
+    lista.append(scheda);
+  });
 }
 
 function disegnaModelli() {

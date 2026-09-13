@@ -119,6 +119,60 @@ class ParseRegistryTest {
     }
 
     @Test
+    fun `la posizione si legge, e senza vale nulla`() {
+        val registro = ok(
+            """{"schema":1,"revisione":1,"dispositivi":[
+               {"uuid":"a","nome":"boiler","tipo":"SWITCH","topic_stato":"s","topic_comando":"c",
+                "posizione":3},
+               {"uuid":"b","nome":"pompa","tipo":"SWITCH","topic_stato":"s2","topic_comando":"c2"}]}""",
+        )
+        assertEquals(3, registro.devices.first().position)
+        assertNull(registro.devices.last().position)
+    }
+
+    @Test
+    fun `lo zero e un posto vero, e non va confuso con l'assenza`() {
+        // La distinzione su cui poggia tutta la feature: zero e' il primo posto,
+        // nullo e' nessun posto — e nessun posto finisce in fondo.
+        val d = ok(
+            """{"schema":1,"revisione":1,"dispositivi":[
+               {"uuid":"a","nome":"boiler","tipo":"SWITCH","topic_stato":"s","topic_comando":"c",
+                "posizione":0}]}""",
+        ).devices.single()
+        assertEquals(0, d.position)
+    }
+
+    @Test
+    fun `una posizione che non si capisce vale come assente, mai come zero`() {
+        // Se ripiegasse su zero, un errore di battitura porterebbe una presa in
+        // cima alla casa invece che in fondo all'elenco.
+        val strane = listOf("-1", "1.5", "\"2\"", "true", "null")
+        strane.forEach { valore ->
+            val d = ok(
+                """{"schema":1,"revisione":1,"dispositivi":[
+                   {"uuid":"a","nome":"x","tipo":"SWITCH","topic_stato":"s","topic_comando":"c",
+                    "posizione":$valore}]}""",
+            ).devices.single()
+            assertNull("posizione $valore doveva valere come assente", d.position)
+        }
+    }
+
+    @Test
+    fun `una posizione ripetuta non fa saltare nessuno`() {
+        // Chi scrive non le produce, ma un documento scritto a mano puo'. Due
+        // posti uguali sono un ordine ambiguo, non un documento illeggibile.
+        val registro = ok(
+            """{"schema":1,"revisione":1,"dispositivi":[
+               {"uuid":"a","nome":"boiler","tipo":"SWITCH","topic_stato":"s","topic_comando":"c",
+                "posizione":1},
+               {"uuid":"b","nome":"pompa","tipo":"SWITCH","topic_stato":"s2","topic_comando":"c2",
+                "posizione":1}]}""",
+        )
+        assertEquals(2, registro.devices.size)
+        assertTrue(registro.skipped.isEmpty())
+    }
+
+    @Test
     fun `un tipo sconosciuto salta quel dispositivo, non gli altri`() {
         val registro = ok(
             """{"schema":1,"revisione":1,"dispositivi":[
@@ -271,6 +325,24 @@ class RegistryPlanTest {
         val aggiornato = piano.updated.single()
         assertEquals(7L, aggiornato.id)
         assertEquals("boiler bagno", aggiornato.name)
+        assertTrue(piano.inserted.isEmpty())
+        assertTrue(piano.deletedIds.isEmpty())
+    }
+
+    @Test
+    fun `un dispositivo solo spostato si aggiorna, e conserva il proprio id`() {
+        // Il riordino visto dal piano: cambia un campo solo, e quel campo deve
+        // arrivare al database. Ma **aggiornando in loco**, perche' un id nuovo
+        // vorrebbe dire scheda azzerata e sottoscrizioni rifatte a ogni
+        // trascinamento.
+        val locale = dalRegistro("a", "boiler").copy(id = 7L, position = 0)
+        val piano = planRegistry(
+            registro(dalRegistro("a", "boiler").copy(position = 3)),
+            listOf(locale),
+        )
+        val aggiornato = piano.updated.single()
+        assertEquals(7L, aggiornato.id)
+        assertEquals(3, aggiornato.position)
         assertTrue(piano.inserted.isEmpty())
         assertTrue(piano.deletedIds.isEmpty())
     }

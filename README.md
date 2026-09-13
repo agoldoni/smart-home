@@ -194,6 +194,23 @@ mosquitto_pub -h <broker> -u <utente> -P <password> -t casa/registro/dispositivi
 Le app smettono di seguirlo e **tengono i dispositivi che hanno**. La lettura opposta —
 registro cancellato uguale casa senza dispositivi — farebbe di un comando solo un disastro.
 
+### L'ordine dei dispositivi
+
+L'elenco della vista principale è ordinato dal registro. Nel configuratore le righe si
+**trascinano** dalla maniglia a sinistra del nome, o si spostano con le frecce `↑` `↓` per
+chi non può trascinare; l'ordine si pubblica da sé un attimo dopo, senza premere niente, e
+arriva a ogni telefono che segue quel registro.
+
+Sotto c'è un campo facoltativo, `posizione`, e da lì discende tutto il resto:
+
+- **Chi non ha una posizione va in fondo, in ordine di nome.** Quindi finché nessuno
+  riordina, l'elenco è quello di sempre: un registro scritto prima di questa feature si
+  comporta esattamente come prima
+- **Un'app vecchia ignora il campo** e continua a funzionare: il formato resta a `schema: 1`
+- **Riordinare non tocca nient'altro.** Nessun dispositivo rinasce, nessuna scheda si
+  azzera, nessuna sottoscrizione viene rifatta: quello che cambia è dove sta la riga, non
+  come la si ascolta
+
 Il formato, i campi e le regole di rifiuto stanno in `bridge/configuratore/SCHEMA.md`.
 
 ## Il broker
@@ -357,7 +374,9 @@ produrre un APK non firmato.
 
 Coprono le funzioni pure del driver: il confronto fra filtro di sottoscrizione e topic (con
 `+` e `#`), la lettura di un campo da un payload JSON, e l'interpretazione del payload di
-disponibilità. Sono anche le più facili da sbagliare in silenzio — un topic che non combacia
+disponibilità. Più la lettura del registro, il piano che ne discende, la regola del
+lucchetto e quella che dice quando due versioni di un dispositivo **si ascoltano allo stesso
+modo** — che è ciò che impedisce a un riordino di rifare le sottoscrizioni di casa. Sono anche le più facili da sbagliare in silenzio — un topic che non combacia
 non produce nessun errore, solo un dispositivo perennemente "in attesa di dati" — e per la
 disponibilità il caso che conta è il payload incomprensibile, che non deve mai diventare
 "non raggiungibile": da un valore che non si è capito non si deduce che il dispositivo sia
@@ -372,7 +391,8 @@ sparito.
   letto, e il configuratore non propone i topic che vede passare: quello è il passo dopo.
 - **Il registro va in una direzione sola.** Si scrive dal configuratore e si legge dalle
   app; un'app non ci scrive dentro.
-- **Nessun raggruppamento.** La stanza è solo un'etichetta: non ordina né raccoglie le
-  schede.
+- **Nessun raggruppamento.** L'ordine è una sequenza sola, decisa a mano: niente sezioni e
+  niente stanze. La stanza resta un'etichetta locale, e da questa versione non ordina più
+  niente — a ordinare è il registro.
 - **Un solo broker.**
 # smart-home

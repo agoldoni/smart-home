@@ -190,6 +190,7 @@ private fun leggiDispositivo(voce: JSONObject, indice: Int, visti: Set<String>):
             levelMax = voce.optInt("livello_max", 100).coerceIn(1, 65535),
             qos = voce.optInt("qos", 0).coerceIn(0, 2),
             retained = voce.optBoolean("ritenuto", false),
+            position = voce.posizione(),
         ),
     )
 }
@@ -202,6 +203,27 @@ private fun leggiDispositivo(voce: JSONObject, indice: Int, visti: Set<String>):
  */
 private fun JSONObject.testo(chiave: String): String? =
     if (isNull(chiave)) null else optString(chiave).trim().takeIf { it.isNotEmpty() }
+
+/**
+ * Il posto nell'elenco, oppure null.
+ *
+ * Non si ripiega mai su zero, ed e' la regola piu' importante di questo campo:
+ * zero e' il **primo** posto, e un valore che non si e' capito non puo' portare
+ * un dispositivo in cima alla casa. Assente, negativo, con la virgola o scritto
+ * come stringa valgono tutti "nessuno lo ha collocato", che lo manda in fondo
+ * insieme agli altri senza posto.
+ *
+ * E' la stessa regola che l'app applica ai payload di disponibilita': da un
+ * valore che non si e' capito non si deduce niente.
+ */
+private fun JSONObject.posizione(): Int? {
+    val valore = opt("posizione")
+    if (valore !is Number) return null
+    val intero = valore.toInt()
+    // Un intero, non un numero qualsiasi: 1.5 non e' un posto in un elenco.
+    if (intero.toDouble() != valore.toDouble()) return null
+    return intero.takeIf { it >= 0 }
+}
 
 private fun String.hasWildcard(): Boolean = contains('+') || contains('#')
 

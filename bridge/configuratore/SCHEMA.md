@@ -32,6 +32,7 @@ Ne discende un nome riservato: dentro un prefisso, **nessun dispositivo può chi
     {
       "uuid": "8f1c2d3e-4a5b-6c7d-8e9f-0a1b2c3d4e5f",
       "nome": "frigorifero",
+      "posizione": 2,
       "tipo": "SWITCH",
       "topic_stato": "casa/frigorifero/stato",
       "campo_stato": "stato",
@@ -71,6 +72,7 @@ Ne discende un nome riservato: dentro un prefisso, **nessun dispositivo può chi
 |---|---|---|---|---|
 | `uuid` | stringa | sì | — | Identità nel registro, stabile per sempre. Non è l'id locale dell'app, che è un numero diverso su ogni telefono |
 | `nome` | stringa | sì | — | Quello che si legge sulla scheda |
+| `posizione` | intero ≥ 0 | no | assente | Dove sta il dispositivo nell'elenco. Assente vuol dire che nessuno lo ha collocato. Vedi *L'ordine* |
 | `tipo` | stringa | sì | — | `SWITCH`, `LIGHT`, `DIMMER`, `SENSOR` |
 | `topic_stato` | stringa | sì | — | Dove il dispositivo pubblica. Ammette `+` e `#` |
 | `campo_stato` | stringa/null | no | `null` | Campo JSON da leggere, con il punto per i livelli annidati. `null` se il payload è già il valore |
@@ -89,9 +91,10 @@ Ne discende un nome riservato: dentro un prefisso, **nessun dispositivo può chi
 | `qos` | intero 0-2 | no | `0` | — |
 | `ritenuto` | booleano | no | `false` | Comandi ritenuti dal broker |
 
-`stanza` **non c'è**: l'app non ordina né raggruppa per stanza, e un campo che nessuno legge
-invecchia male. Rimetterlo quando servirà non romperà i lettori vecchi — vedi *Far evolvere
-lo schema*.
+`stanza` **non c'è**: l'app non raggruppa per stanza, e un campo che nessuno legge invecchia
+male. L'ordine, che era l'altro motivo per cui una stanza poteva servire, adesso ce l'ha per
+conto suo — vedi *L'ordine*. Rimettere `stanza` quando servirà non romperà i lettori vecchi:
+vedi *Far evolvere lo schema*.
 
 ## Le regole di lettura
 
@@ -106,6 +109,8 @@ Sono la parte che conta più dei nomi dei campi.
 | `tipo` sconosciuto | quel dispositivo **saltato**, gli altri applicati |
 | `uuid` mancante, vuoto o duplicato | quel dispositivo saltato |
 | `topic_stato` mancante o vuoto | quel dispositivo saltato |
+| `posizione` assente, negativa, non intera o non numerica | vale come **assente**: il dispositivo va in fondo, per nome. Mai zero — zero lo metterebbe in cima |
+| `posizione` ripetuta su più dispositivi | si applicano tutti, e fra loro si ordinano per nome |
 | Campo sconosciuto dentro un dispositivo valido | **ignorato** |
 | Campo noto di tipo sbagliato | si usa il predefinito, se ne ha uno; altrimenti il dispositivo è saltato |
 
@@ -118,6 +123,53 @@ Il rifiuto è **in blocco** per la testata e **per dispositivo** per il contenut
 è che un `schema` sbagliato mette in dubbio ogni campo del documento, mentre un `tipo` che
 non si conosce mette in dubbio un dispositivo solo: buttare gli altri sei sarebbe una
 punizione senza motivo.
+
+## L'ordine
+
+I dispositivi si mostrano nell'ordine che il registro dichiara, e la regola è **una sola per
+tutti quelli che leggono**:
+
+1. Prima chi ha una `posizione`, in ordine crescente
+2. Poi chi non ce l'ha
+3. A parità — stessa posizione, o entrambi senza — **per nome**
+
+Il terzo punto non è pignoleria. Senza un criterio di spareggio dichiarato, due dispositivi
+con la stessa posizione si ordinerebbero come capita, e capiterebbe *diversamente* in
+programmi diversi: SQLite e `Array.prototype.sort` non hanno la stessa idea di stabilità, e
+due telefoni mostrerebbero due case.
+
+### L'ordine dell'array non si legge mai
+
+Il documento porta due ordini: le posizioni, e la sequenza in cui le voci stanno dentro
+`dispositivi`. **Il secondo non è un'informazione.** Chi scrive pubblica comunque le voci già
+ordinate — per riguardo verso chi legge il JSON con gli occhi — ma nessun lettore ci si
+appoggia, e un intermediario che rimescolasse la lista non cambierebbe la casa di nessuno.
+
+### Chi assegna le posizioni
+
+Lo scrittore, cioè il configuratore. Tre regole:
+
+- **Riordino:** tutte le voci vengono rinumerate in blocco, `0, 1, 2, …` — ed è il momento in
+  cui anche chi non aveva un posto ne prende uno: trascinare una riga vuol dire decidere
+  l'ordine di tutto l'elenco, non solo di quella
+- **Dispositivo nuovo**, un duplicato compreso: prende `max + 1`, ma **solo se almeno un
+  altro ha già una posizione**. Altrimenti non ne prende nessuna
+- **Modifica:** la posizione non si tocca
+- **Cancellazione:** resta un buco, `0, 1, 3`. Non rompe niente e non cambia l'ordine; il
+  primo riordino lo richiude
+
+La seconda regola evita la trappola. In un registro dove nessuno ha ancora riordinato, dare
+`"posizione": 0` al primo dispositivo aggiunto lo farebbe schizzare **in cima** a tutti gli
+altri — che sono senza posizione, quindi in fondo per definizione. Un campo invisibile che
+riordina la casa di sorpresa è il difetto peggiore che questo campo possa avere.
+
+### Perché un campo e non l'ordine delle voci
+
+Una lista JSON è già ordinata: la posizione poteva essere il solo indice dell'array. Un campo
+esplicito costa un numero per dispositivo e in cambio si può lasciare vuoto per uno solo, non
+dipende da come un intermediario ha trattato la lista, e soprattutto **si vede**: un registro
+letto a occhio dice dove va ogni dispositivo, invece di dirlo di nascosto con l'ordine delle
+righe.
 
 ## Cancellare il registro
 
@@ -134,7 +186,7 @@ quel comando un disastro.
 
 **Aggiungere un campo è additivo e non richiede di alzare `schema`**: un lettore vecchio
 ignora quello che non conosce, un lettore nuovo trova il predefinito quando il campo non
-c'è. È così che `stanza` potrà tornare.
+c'è. È così che è entrata `posizione`, ed è così che `stanza` potrà tornare.
 
 `schema` si alza solo quando qualcosa **si rompe**: un campo che cambia significato, un
 obbligo nuovo, un tipo diverso. Quando succede, il lettore nuovo deve saper leggere anche il

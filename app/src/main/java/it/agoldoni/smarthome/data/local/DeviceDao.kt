@@ -9,7 +9,19 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface DeviceDao {
 
-    @Query("SELECT * FROM devices ORDER BY room COLLATE NOCASE, name COLLATE NOCASE")
+    /**
+     * L'ordine dell'elenco, ed e' l'unico posto da cui esce.
+     *
+     * `position IS NULL` in testa perche' in SQLite i NULL vengono **primi** in
+     * ordine crescente, e qui devono venire ultimi: chi nessuno ha collocato sta
+     * in fondo, non in cima. Il nome e' lo spareggio dichiarato dal contratto —
+     * senza, due dispositivi con la stessa posizione si ordinerebbero come
+     * capita, e capiterebbe diversamente qui e nel configuratore.
+     */
+    @Query(
+        "SELECT * FROM devices " +
+            "ORDER BY (position IS NULL), position, name COLLATE NOCASE",
+    )
     fun observeAll(): Flow<List<DeviceEntity>>
 
     @Query("SELECT * FROM devices")

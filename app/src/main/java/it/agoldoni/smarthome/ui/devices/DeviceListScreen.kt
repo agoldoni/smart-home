@@ -275,6 +275,11 @@ fun DeviceListScreen(
                 ) {
                     items(state.devices, key = { it.device.id }) { item ->
                         DeviceCard(
+                            // Un riordino arriva da fuori, mentre si sta
+                            // guardando l'elenco: la chiave e' l'id, quindi
+                            // Compose sa gia' quale scheda si e' spostata, e
+                            // questa riga le fa scivolare invece di saltare.
+                            modifier = Modifier.animateItem(),
                             item = item,
                             locked = state.locked,
                             onPower = { on -> viewModel.setPower(item.device, on) },
@@ -399,6 +404,7 @@ private fun DeviceCard(
     onPower: (Boolean) -> Unit,
     onLevel: (Int) -> Unit,
     onEdit: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val device = item.device
     // Due motivi, una risposta sola: la regola sta nel ViewModel perche' e'
@@ -416,7 +422,7 @@ private fun DeviceCard(
     val faded = if (powered) green.content.copy(alpha = 0.6f) else MaterialTheme.colorScheme.outline
 
     Card(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clickable(onClick = onEdit),
         colors = CardDefaults.cardColors(

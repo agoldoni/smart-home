@@ -81,6 +81,23 @@ Il broker non ha persistenza, quindi il registro **va ripubblicato a ogni
 <http://localhost:8080> lo legge e lo riscrive come farebbe a casa, ed è anche il
 modo di provare il configuratore stesso.
 
+E c'è una trappola che discende da lì. Il broker riparte dalla revisione del file,
+ma **il telefono ricorda l'ultima che ha applicato** — quel numero sta nel suo
+DataStore e un riavvio del broker non lo tocca. Dopo qualche giro di prove il
+telefono può essere avanti: allora ogni riordino fatto dal configuratore arriva
+davvero, e viene scartato con
+
+```
+registro   revisione 8 gia' applicata, ignorata
+```
+
+che si legge in `tools/debug-api.py --adb get /log`. Non è un difetto — è la
+regola che impedisce a un documento vecchio di sovrascriverne uno nuovo — ma da
+fuori sembra un riordino che non arriva. Si rimette a posto in due modi:
+ripubblicando il documento con una revisione più alta di quella applicata, oppure
+con `adb shell pm clear it.agoldoni.smarthome.debug`, che azzera anche la memoria
+del telefono. A casa non succede: lì il broker è persistente.
+
 Per lavorare sui dispositivi *veri* si può copiare il registro di casa, ma allora
 i nomi tornano a essere quelli del salotto — da fare sapendo perché lo si sta
 facendo, e per il tempo che serve.

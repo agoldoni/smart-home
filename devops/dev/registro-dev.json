@@ -1,6 +1,6 @@
 {
  "schema": 1,
- "revisione": 1,
+ "revisione": 2,
  "aggiornato": "2026-09-13T20:00:00+02:00",
  "dispositivi": [
   {
@@ -24,7 +24,8 @@
    "campo_livello": null,
    "livello_max": 100,
    "qos": 1,
-   "ritenuto": false
+   "ritenuto": false,
+   "posizione": 2
   },
   {
    "uuid": "dee00000-0000-4000-8000-000000000002",
@@ -47,7 +48,8 @@
    "campo_livello": null,
    "livello_max": 100,
    "qos": 1,
-   "ritenuto": false
+   "ritenuto": false,
+   "posizione": 6
   },
   {
    "uuid": "dee00000-0000-4000-8000-000000000003",
@@ -70,7 +72,8 @@
    "campo_livello": null,
    "livello_max": 100,
    "qos": 1,
-   "ritenuto": false
+   "ritenuto": false,
+   "posizione": 5
   },
   {
    "uuid": "dee00000-0000-4000-8000-000000000004",
@@ -93,7 +96,8 @@
    "campo_livello": null,
    "livello_max": 100,
    "qos": 1,
-   "ritenuto": false
+   "ritenuto": false,
+   "posizione": 4
   },
   {
    "uuid": "dee00000-0000-4000-8000-000000000005",
@@ -116,7 +120,8 @@
    "campo_livello": "livello",
    "livello_max": 100,
    "qos": 1,
-   "ritenuto": false
+   "ritenuto": false,
+   "posizione": 1
   },
   {
    "uuid": "dee00000-0000-4000-8000-000000000006",
@@ -139,7 +144,8 @@
    "campo_livello": null,
    "livello_max": 100,
    "qos": 1,
-   "ritenuto": false
+   "ritenuto": false,
+   "posizione": 3
   },
   {
    "uuid": "dee00000-0000-4000-8000-000000000007",
@@ -162,7 +168,8 @@
    "campo_livello": null,
    "livello_max": 100,
    "qos": 1,
-   "ritenuto": false
+   "ritenuto": false,
+   "posizione": 0
   }
  ]
 }

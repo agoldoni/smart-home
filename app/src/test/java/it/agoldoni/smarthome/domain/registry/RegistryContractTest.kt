@@ -95,6 +95,21 @@ class RegistryContractTest {
     }
 
     @Test
+    fun `il configuratore scrive le posizioni, e si leggono tutte`() {
+        // L'ordine del documento **non e' alfabetico di proposito**: un lettore
+        // che ignorasse le posizioni e ordinasse per nome mostrerebbe un altro
+        // elenco, e questo test e' il punto in cui la differenza si vede.
+        assertEquals(
+            listOf(
+                "boiler" to 0, "depuratore" to 1, "lavastoviglie" to 2,
+                "lavatrice-nuova" to 3, "jacopo-studio" to 4, "frigorifero" to 5,
+                "pompa" to 6,
+            ),
+            registro.devices.map { it.name to it.position },
+        )
+    }
+
+    @Test
     fun `applicato a un telefono vuoto inserisce le sette prese e non cancella niente`() {
         val piano = planRegistry(registro, emptyList())
         assertEquals(7, piano.inserted.size)

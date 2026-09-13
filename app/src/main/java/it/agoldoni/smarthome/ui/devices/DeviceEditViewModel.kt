@@ -80,11 +80,21 @@ class DeviceEditViewModel(
      */
     private var uuid: String = ""
 
+    /**
+     * Il posto nell'elenco, tenuto da parte per la stessa ragione dell'uuid: non
+     * e' un campo del modulo — l'ordine si decide dal configuratore — ma il
+     * salvataggio ricostruisce il dispositivo da zero, e senza conservarlo qui
+     * ogni correzione fatta dal telefono lo manderebbe in fondo all'elenco. Da
+     * dove non tornerebbe: il registro e' ritenuto e quella revisione e' gia'
+     * stata applicata, quindi non si riapplica.
+     */
+    private var position: Int? = null
 
     init {
         viewModelScope.launch {
             val existing = if (deviceId == NEW_DEVICE_ID) null else repository.find(deviceId)
             uuid = existing?.uuid.orEmpty()
+            position = existing?.position
             _uiState.update { it.copy(form = existing?.toForm() ?: DeviceForm(), loading = false) }
         }
         viewModelScope.launch {
@@ -117,7 +127,7 @@ class DeviceEditViewModel(
             return
         }
         viewModelScope.launch {
-            repository.save(form.toDevice(deviceId, uuid))
+            repository.save(form.toDevice(deviceId, uuid, position))
             _uiState.update { it.copy(closed = true) }
         }
     }
@@ -202,9 +212,10 @@ private fun Device.toForm() = DeviceForm(
     retained = retained,
 )
 
-private fun DeviceForm.toDevice(id: Long, uuid: String) = Device(
+private fun DeviceForm.toDevice(id: Long, uuid: String, position: Int?) = Device(
     id = id,
     uuid = uuid,
+    position = position,
     name = name.trim(),
     room = room.trim(),
     kind = kind,

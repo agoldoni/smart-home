@@ -198,7 +198,14 @@ class MqttDeviceDriver(
                 // correggere una chiave JSON lascerebbe la scheda vuota fino al
                 // prossimo messaggio, che su un topic lento sono minuti — e
                 // sembra che la correzione non abbia funzionato.
-                val cambiati = devices.filter { precedenti[it.id]?.equals(it) == false }
+                //
+                // "Modificato" vuol dire **come si ascolta**, non com'e' fatta
+                // la scheda: un dispositivo rinominato o spostato nell'elenco si
+                // sente allo stesso modo di un istante prima. Il confronto era
+                // sull'oggetto intero, e con l'ordine dentro Device un riordino
+                // avrebbe rifatto tutte le sottoscrizioni della casa a ogni
+                // trascinamento.
+                val cambiati = devices.filter { precedenti[it.id]?.listensLike(it) == false }
                 if (cambiati.isNotEmpty()) {
                     val topic = cambiati.flatMapTo(mutableSetOf()) { it.subscriptions }
                     subscribed = subscribed - topic

@@ -337,6 +337,10 @@ internal class DebugReport(
             put("uuid", device.uuid)
             put("name", device.name)
             put("room", device.room)
+            // Nullo: nessun registro lo ha collocato, quindi sta in fondo per
+            // nome. L'array `devices` esce nell'ordine del database, percio' da
+            // qui si legge l'ordine vero dell'elenco senza guardare lo schermo.
+            putOrNull("position", device.position)
             put("kind", device.kind.name)
             put("qos", device.qos)
             put("retained", device.retained)

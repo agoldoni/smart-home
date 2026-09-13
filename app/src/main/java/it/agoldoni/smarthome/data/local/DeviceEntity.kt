@@ -36,6 +36,8 @@ data class DeviceEntity(
     val levelMax: Int,
     val qos: Int,
     val retained: Boolean,
+    /** Posto nell'elenco. Nullo per chi nessuno ha mai collocato. */
+    val position: Int? = null,
 )
 
 fun DeviceEntity.toDomain(): Device = Device(
@@ -62,6 +64,7 @@ fun DeviceEntity.toDomain(): Device = Device(
     levelMax = levelMax,
     qos = qos,
     retained = retained,
+    position = position,
 )
 
 fun Device.toEntity(): DeviceEntity = DeviceEntity(
@@ -88,4 +91,5 @@ fun Device.toEntity(): DeviceEntity = DeviceEntity(
     levelMax = levelMax,
     qos = qos,
     retained = retained,
+    position = position,
 )

@@ -5,7 +5,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [DeviceEntity::class], version = 5, exportSchema = true)
+@Database(entities = [DeviceEntity::class], version = 6, exportSchema = true)
 abstract class SmartHomeDatabase : RoomDatabase() {
     abstract fun deviceDao(): DeviceDao
 }
@@ -70,5 +70,24 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
 val MIGRATION_4_5 = object : Migration(4, 5) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL("ALTER TABLE devices ADD COLUMN uuid TEXT NOT NULL DEFAULT ''")
+    }
+}
+
+/**
+ * Aggiunge il posto del dispositivo nell'elenco.
+ *
+ * Nulla per le righe che ci sono gia', e come per le quattro migrazioni
+ * precedenti il nullo dice una verita' invece di ripiegare: di questi
+ * dispositivi nessuno ha mai deciso l'ordine, ed e' vero — fino a ieri l'ordine
+ * lo decideva l'alfabeto per conto suo. Chi non ha posizione va in fondo e resta
+ * in ordine di nome, quindi l'elenco del primo avvio dopo l'aggiornamento e'
+ * identico a quello dell'ultimo avvio prima.
+ *
+ * Nessun `DEFAULT`: uno zero come predefinito darebbe a tutti il **primo**
+ * posto, che e' il contrario di "nessun posto".
+ */
+val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE devices ADD COLUMN position INTEGER")
     }
 }

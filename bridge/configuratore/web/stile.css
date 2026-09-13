@@ -92,6 +92,18 @@ button.pericolo:hover { border-color: var(--errore); color: var(--errore); }
 .scheda .tipo { font-size: .78rem; color: var(--tenue); }
 .scheda code { display: block; font-size: .78rem; color: var(--tenue);
                margin: 2px 0 8px; overflow-wrap: anywhere; }
+.scheda .presa { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.scheda.trascinata { opacity: .55; border-color: var(--accento); }
+
+/* `touch-action: none` non e' un dettaglio: senza, sul telefono il browser
+   interpreta il primo movimento come uno scorrimento della pagina e il codice
+   vede un pointercancel invece del trascinamento. */
+.maniglia { cursor: grab; color: var(--tenue); user-select: none;
+            touch-action: none; padding: 0 2px; letter-spacing: -2px; }
+.scheda.trascinata .maniglia { cursor: grabbing; }
+
+button.ordine { padding: 4px 9px; line-height: 1; }
+button.ordine[disabled] { opacity: .35; cursor: default; border-color: var(--bordo); }
 
 code { font-family: ui-monospace, SFMono-Regular, monospace; font-size: .8rem; }
 

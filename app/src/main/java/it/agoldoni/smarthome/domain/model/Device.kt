@@ -88,10 +88,41 @@ data class Device(
     val qos: Int = 0,
     /** Comandi ritenuti dal broker. Di norma no: un comando e un evento, non uno stato. */
     val retained: Boolean = false,
+    /**
+     * Dove sta nell'elenco, per chi lo ha collocato. Nullo vuol dire che nessun
+     * registro gli ha mai dato un posto, e quelli vanno **in fondo**, in ordine
+     * di nome.
+     *
+     * Nullo non e' zero, e la differenza e' tutta la sicurezza di questo campo:
+     * zero e' il primo posto, nullo e' l'ultimo. Un valore che non si capisce
+     * diventa nullo e non zero, altrimenti un errore di battitura porterebbe un
+     * dispositivo in cima alla casa.
+     *
+     * E' l'unico campo che non dice ne' cosa sia il dispositivo ne' come gli si
+     * parli: dice come lo si guarda.
+     */
+    val position: Int? = null,
 ) {
     val controllable: Boolean get() = kind != DeviceKind.SENSOR
 
     val dimmable: Boolean get() = kind == DeviceKind.DIMMER
+
+    /**
+     * Le stesse orecchie: stessi topic, e stesso modo di leggere quel che arriva.
+     *
+     * Serve a chi deve decidere se un dispositivo cambiato vada risottoscritto.
+     * E' scritto come **esclusione** e non come elenco dei campi che contano, e
+     * non e' un vezzo: un campo di rete aggiunto domani entra qui da se', mentre
+     * dimenticarsi di aggiungerlo a un elenco di campi buoni non darebbe nessun
+     * errore e lascerebbe una scheda vuota fino al messaggio dopo.
+     *
+     * Fuori restano identita' e presentazione: id, uuid, nome, stanza e
+     * posizione non cambiano ne' dove si ascolta ne' come si interpreta quello
+     * che si sente.
+     */
+    fun listensLike(other: Device): Boolean = anonimo() == other.anonimo()
+
+    private fun anonimo(): Device = copy(id = 0L, uuid = "", name = "", room = "", position = null)
 
     /** Topic a cui iscriversi per questo dispositivo. */
     val subscriptions: List<String>
