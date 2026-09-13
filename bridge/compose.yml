@@ -27,8 +27,11 @@ services:
       start_period: 10s
 
   ponte:
-    build: ./tuya-mqtt
-    image: smart-home/tuya-mqtt:latest
+    # Nessun `build:`: l'immagine arriva gia' pronta dalla macchina di sviluppo,
+    # costruita per arm64 e taggata con lo SHA del commit. Vedi devops/deploy.sh.
+    # Cosi' `docker image inspect` risponde a "quale revisione sta girando?", e il
+    # Pi non ha bisogno dei sorgenti per tirare su un servizio.
+    image: smart-home/tuya-mqtt:${IMAGE_TAG:?IMAGE_TAG non impostato: lo scrive devops/deploy.sh in .env}
     container_name: sh-ponte
     restart: unless-stopped
     # Come il broker: senza, i file dell'archivio nascerebbero di root dentro
@@ -53,8 +56,7 @@ services:
         condition: service_healthy
 
   configuratore:
-    build: ./configuratore
-    image: smart-home/configuratore:latest
+    image: smart-home/configuratore:${IMAGE_TAG:?IMAGE_TAG non impostato: lo scrive devops/deploy.sh in .env}
     container_name: sh-configuratore
     restart: unless-stopped
     # Niente depends_on sul broker: e' il browser a parlargli, non questo
