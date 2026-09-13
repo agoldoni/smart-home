@@ -36,7 +36,15 @@ condiviso*.
    arriva a nessuno e vederli scattare racconterebbe un'accensione mai avvenuta. Vale più di quanto sembri: senza, una presa staccata
    resta "accesa" nell'elenco con la stessa sicurezza di una viva, e un comando mandato
    mentre era via lascerebbe la scheda su "comando inviato" per sempre.
-5. **Le riconnessioni** hanno un padrone solo: un ciclo dentro il driver. La
+5. **Il lucchetto in barra** mette la vista principale in sola lettura: interruttori e
+   cursori restano inerti e nessun comando parte, mentre stato e consumi continuano ad
+   arrivare come sempre. Serve contro il tocco distratto — l'app aperta con le mani
+   occupate, il telefono passato a qualcuno — e lo stato sopravvive alla chiusura dell'app.
+   **Non è una misura di sicurezza:** le prese restano comandabili da ogni altro telefono,
+   dal ponte e dall'app Tuya. Non blocca la modifica dei dispositivi né le impostazioni,
+   solo ciò che ha effetto sulle prese, e ogni telefono ha il suo — non passa dal registro
+   condiviso.
+6. **Le riconnessioni** hanno un padrone solo: un ciclo dentro il driver. La
    riconnessione automatica di Paho è spenta di proposito, e non per gusto: vive su un
    timer interno che l'API pubblica non sa fermare, così un client che credevamo chiuso
    tornava a collegarsi da solo con lo stesso client id e rubava la sessione a quello

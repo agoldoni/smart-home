@@ -53,6 +53,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -83,6 +84,11 @@ fun DeviceListScreen(
     val registry by viewModel.registryStatus.collectAsStateWithLifecycle()
     val proposal by viewModel.proposal.collectAsStateWithLifecycle()
     val commandsSentLabel = stringResource(R.string.commands_sent_desc)
+    // Lo stato letto da TalkBack e' separato dall'etichetta del tocco: la
+    // descrizione dice cosa succede se premi, questa dice come stai adesso.
+    val lockStateLabel = stringResource(
+        if (state.locked) R.string.view_locked_state_locked else R.string.view_locked_state_unlocked,
+    )
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(viewModel) {
@@ -197,8 +203,8 @@ fun DeviceListScreen(
                 },
                 actions = {
                     // Il tocco resta di 48.dp, ma la cornice disegnata e piu
-                    // stretta: cosi il "+" sta addosso all'ingranaggio e i due
-                    // si leggono come una coppia di comandi della barra.
+                    // stretta: tre icone in fila su una barra che ha gia due
+                    // righe di titolo vogliono stare strette.
                     // Seguendo il registro, da qui non si aggiunge: un "+"
                     // che apre un modulo in sola lettura sarebbe una promessa
                     // che non viene mantenuta.
@@ -209,6 +215,27 @@ fun DeviceListScreen(
                         ) {
                             Icon(Icons.Default.Add, stringResource(R.string.action_add_device))
                         }
+                    }
+                    // Il lucchetto sta fra il "+" e l'ingranaggio: e l'unico
+                    // comando della barra che cambia cosa fanno le schede
+                    // sotto, e sta addosso a loro invece che in fondo.
+                    // Aperto e chiuso sono due disegni diversi e non due tinte
+                    // dello stesso: la barra si legge anche senza colore.
+                    IconButton(
+                        onClick = viewModel::toggleLock,
+                        modifier = Modifier.size(40.dp),
+                    ) {
+                        Icon(
+                            painter = painterResource(
+                                if (state.locked) R.drawable.ic_lock_closed else R.drawable.ic_lock_open,
+                            ),
+                            contentDescription = stringResource(
+                                if (state.locked) R.string.view_locked_unlock else R.string.view_locked_lock,
+                            ),
+                            modifier = Modifier.semantics {
+                                stateDescription = lockStateLabel
+                            },
+                        )
                     }
                     IconButton(onClick = onOpenSettings) {
                         Icon(Icons.Default.Settings, stringResource(R.string.action_settings))
@@ -249,6 +276,7 @@ fun DeviceListScreen(
                     items(state.devices, key = { it.device.id }) { item ->
                         DeviceCard(
                             item = item,
+                            locked = state.locked,
                             onPower = { on -> viewModel.setPower(item.device, on) },
                             onLevel = { level -> viewModel.setLevel(item.device, level) },
                             onEdit = { onEditDevice(item.device) },
@@ -367,11 +395,15 @@ private fun EmptyDevices(onAddDevice: () -> Unit, following: Boolean) {
 @Composable
 private fun DeviceCard(
     item: DeviceUi,
+    locked: Boolean,
     onPower: (Boolean) -> Unit,
     onLevel: (Int) -> Unit,
     onEdit: () -> Unit,
 ) {
     val device = item.device
+    // Due motivi, una risposta sola: la regola sta nel ViewModel perche' e'
+    // l'unica cosa di questa feature che si possa provare senza un telefono.
+    val commandable = item.commandable(locked)
     val lastKnownOn = item.state.power == true
     // Il verde dice "sta funzionando adesso", quindi non lo merita un
     // dispositivo che risulta acceso ma non risponde piu: li' l'ultimo stato e
@@ -449,10 +481,14 @@ private fun DeviceCard(
                     // nessuno, e vederlo scattare racconterebbe un'accensione
                     // che non e avvenuta. La posizione mostrata resta l'ultima
                     // saputa, come il testo qui accanto.
+                    // A vista bloccata vale lo stesso ragionamento con un
+                    // secondo motivo: il comando non lo vogliamo mandare, e
+                    // un interruttore che scatta e torna indietro sembrerebbe
+                    // un guasto invece di un blocco.
                     Switch(
                         checked = lastKnownOn,
                         onCheckedChange = onPower,
-                        enabled = !item.state.unreachable,
+                        enabled = commandable,
                     )
                 }
             }
@@ -469,7 +505,7 @@ private fun DeviceCard(
                     onValueChange = { slider = it },
                     onValueChangeFinished = { onLevel(slider.roundToInt()) },
                     valueRange = 0f..100f,
-                    enabled = !item.state.unreachable,
+                    enabled = commandable,
                 )
             }
         }

@@ -15,7 +15,12 @@ import it.agoldoni.smarthome.ui.settings.BrokerSettingsViewModel
 val AppViewModelFactory = viewModelFactory {
     initializer {
         val container = container()
-        DeviceListViewModel(container.deviceRepository, container.driver, container.registrySync)
+        DeviceListViewModel(
+            container.deviceRepository,
+            container.driver,
+            container.registrySync,
+            container.viewLockStore,
+        )
     }
     initializer {
         val container = container()

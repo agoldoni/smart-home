@@ -14,6 +14,14 @@
     <string name="action_configure">Configura</string>
     <string name="action_reconnect">Riconnetti</string>
 
+    <!-- Il lucchetto della vista principale. "view_" e non "registry_": il
+         registro blocca il modulo di modifica, questo blocca i comandi, e
+         confonderli sarebbe confondere due cose diverse. -->
+    <string name="view_locked_lock">Blocca i comandi</string>
+    <string name="view_locked_unlock">Sblocca i comandi</string>
+    <string name="view_locked_state_locked">Vista bloccata: i comandi non partono</string>
+    <string name="view_locked_state_unlocked">Vista sbloccata: i comandi partono</string>
+
     <string name="devices_empty_title">Nessun dispositivo</string>
     <string name="devices_empty_body">Registra il primo dispositivo: servono il topic su cui pubblica il proprio stato e quello su cui ascolta i comandi.</string>
 

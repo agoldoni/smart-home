@@ -174,6 +174,16 @@ internal class DebugReport(
      * Non c'e' niente di segreto qui dentro: il registro e' la configurazione
      * dei dispositivi, non le credenziali per raggiungerli.
      */
+    /**
+     * Lo stato della vista principale.
+     *
+     * Una chiave sola, ma risponde alla domanda che uno si fa quando i comandi
+     * non partono e il broker risulta connesso: e' rotto, o e' bloccato?
+     */
+    private fun view() = JSONObject().apply {
+        put("locked", container.viewLocked.value)
+    }
+
     private fun registry() = JSONObject().apply {
         val stato = container.registrySync.status.value
         put("followEnabled", stato.followEnabled)
@@ -227,6 +237,7 @@ internal class DebugReport(
         put("uptimeMs", uptime())
         put("warnings", warnings(snapshot, devices, states))
         put("registry", registry())
+        put("view", view())
         put("broker", broker())
         put("devices", devices())
         put("mqtt", JSONObject().apply {

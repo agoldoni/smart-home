@@ -11,6 +11,7 @@ import it.agoldoni.smarthome.data.local.MIGRATION_4_5
 import it.agoldoni.smarthome.data.local.SmartHomeDatabase
 import it.agoldoni.smarthome.data.settings.BrokerSettingsStore
 import it.agoldoni.smarthome.data.settings.RegistryStore
+import it.agoldoni.smarthome.data.settings.ViewLockStore
 import it.agoldoni.smarthome.diagnostics.DebugBridge
 import it.agoldoni.smarthome.domain.driver.DeviceDriver
 import it.agoldoni.smarthome.domain.model.Device
@@ -19,8 +20,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 /**
@@ -55,6 +58,17 @@ class AppContainer(context: Context) {
      * la revisione del registro cambia a ogni salvataggio sul configuratore.
      */
     val registryStore: RegistryStore by lazy { RegistryStore(applicationContext) }
+
+    /** Il lucchetto della vista principale. Un file suo, vedi [ViewLockStore]. */
+    val viewLockStore: ViewLockStore by lazy { ViewLockStore(applicationContext) }
+
+    /**
+     * Il lucchetto leggibile senza aprire una coroutine, per la stessa ragione
+     * di [devices]: l'API di debug racconta lo stato dell'app da fuori, e non
+     * ha dove sospendere.
+     */
+    val viewLocked: StateFlow<Boolean> =
+        viewLockStore.locked.stateIn(applicationScope, SharingStarted.Eagerly, false)
 
     val registrySync: RegistrySync by lazy {
         RegistrySync(applicationScope, driver, deviceRepository, registryStore)
