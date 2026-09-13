@@ -1,4 +1,16 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.util.Properties
+
+/**
+ * Le coordinate dello stack di sviluppo, da local.properties (fuori da git).
+ * Assenti, restano stringhe vuote: la build funziona lo stesso e l'app chiede
+ * il broker come ha sempre fatto.
+ */
+val localProps = Properties().apply {
+    val f = rootProject.file("local.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+fun dev(chiave: String, difetto: String = "") = localProps.getProperty(chiave, difetto)
 
 plugins {
     alias(libs.plugins.android.application)
@@ -36,9 +48,32 @@ android {
             // Le due build convivono sullo stesso telefono: il suffisso finisce
             // nel titolo e dice quale delle due si ha davanti.
             versionNameSuffix = "-debug"
+
+            // La debug nasce puntata allo stack di sviluppo (devops/dev), mai a
+            // casa: si sviluppa contro sette prese finte, e un comando partito
+            // per sbaglio non accende niente. Sono valori *predefiniti* — valgono
+            // finche' nessuno ha salvato le impostazioni su quel telefono, e non
+            // sovrascrivono mai quello che hai configurato a mano.
+            buildConfigField("String", "DEV_BROKER_HOST", "\"${dev("dev.broker.host")}\"")
+            buildConfigField("String", "DEV_BROKER_PORT", "\"${dev("dev.broker.port", "1883")}\"")
+            buildConfigField("String", "DEV_BROKER_USER", "\"${dev("dev.broker.user")}\"")
+            buildConfigField("String", "DEV_BROKER_PASS", "\"${dev("dev.broker.pass")}\"")
+            // Anche il prefisso dei topic: lo sviluppo vive sotto `dev/`, casa
+            // sotto `casa/`. Non e' ordine, e' sicurezza — i due insiemi di topic
+            // non si sovrappongono, quindi nessun comando puo' finire nel ramo
+            // sbagliato nemmeno puntando il broker sbagliato.
+            buildConfigField("String", "DEV_REGISTRY_PREFIX", "\"${dev("dev.registry.prefix")}\"")
         }
         release {
             signingConfig = signingConfigs.getByName("release")
+
+            // La release non ha nessun default: il broker di casa lo si scrive a
+            // mano, una volta, e non viene da un file di build di qualcun altro.
+            buildConfigField("String", "DEV_BROKER_HOST", "\"\"")
+            buildConfigField("String", "DEV_BROKER_PORT", "\"1883\"")
+            buildConfigField("String", "DEV_BROKER_USER", "\"\"")
+            buildConfigField("String", "DEV_BROKER_PASS", "\"\"")
+            buildConfigField("String", "DEV_REGISTRY_PREFIX", "\"\"")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(

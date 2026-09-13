@@ -1,0 +1,55 @@
+# Stack di sviluppo, sul PC. Quello di casa sta in bridge/ e gira sul Raspberry.
+#
+# La differenza che conta e' una sola: qui **non c'e' il ponte Tuya**. Nessun
+# comando puo' arrivare a una presa vera, e le credenziali sono diverse da
+# quelle di casa di proposito — una configurazione sbagliata deve fallire, non
+# collegarsi al broker di produzione.
+services:
+
+  broker:
+    image: eclipse-mosquitto:2
+    container_name: dev-broker
+    restart: unless-stopped
+    # Da root mosquitto scende a uid 1883 e non leggerebbe piu' il file di
+    # password, che appartiene all'utente host. Girando gia' come lui, legge.
+    # Stessa riga dello stack di casa, stessa ragione.
+    user: "${PUID:-1000}:${PGID:-1000}"
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./mosquitto/config/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./mosquitto/config/passwd:/mosquitto/config/passwd:ro
+    healthcheck:
+      test: ["CMD", "mosquitto_sub", "-h", "localhost", "-t", "$$SYS/broker/uptime", "-C", "1", "-W", "3", "-u", "${MQTT_USER}", "-P", "${MQTT_PASS}"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  # I dispositivi finti dello sviluppo: nomi che non assomigliano a quelli di
+  # casa, piu i tipi che a casa non esistono. Vedi prese-finte/prese-finte.sh.
+  prese-finte:
+    image: eclipse-mosquitto:2
+    container_name: dev-prese-finte
+    restart: unless-stopped
+    depends_on:
+      - broker
+    environment:
+      MQTT_USER: ${MQTT_USER}
+      MQTT_PASS: ${MQTT_PASS}
+      BROKER_HOST: broker
+      PREFISSO: dev
+    volumes:
+      - ./prese-finte/prese-finte.sh:/opt/prese-finte.sh:ro
+    entrypoint: ["/bin/sh", "/opt/prese-finte.sh"]
+
+  # La stessa immagine del configuratore di casa, costruita dagli stessi file:
+  # cosi' quello che si prova qui e' quello che finira' sul Pi.
+  configuratore:
+    build: ../../bridge/configuratore
+    image: smart-home/configuratore:dev
+    container_name: dev-configuratore
+    restart: unless-stopped
+    ports:
+      - "${CONFIGURATORE_PORT:-8080}:80"

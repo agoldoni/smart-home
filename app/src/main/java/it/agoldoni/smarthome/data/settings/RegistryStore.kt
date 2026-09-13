@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import it.agoldoni.smarthome.BuildConfig
 import it.agoldoni.smarthome.domain.registry.DEFAULT_REGISTRY_PREFIX
 import it.agoldoni.smarthome.domain.registry.NO_REVISION
 import it.agoldoni.smarthome.domain.registry.registryTopic
@@ -52,7 +53,11 @@ class RegistryStore(private val context: Context) {
 
     val settings: Flow<RegistrySettings> = context.registryDataStore.data.map { prefs ->
         RegistrySettings(
-            prefix = prefs[KEY_PREFIX] ?: DEFAULT_REGISTRY_PREFIX,
+            // Come per il broker: il predefinito della build vale solo finche'
+            // nessuno ha salvato niente su questo telefono. Nella debug e' `dev`,
+            // nella release e' vuoto e si ricade su `casa`.
+            prefix = prefs[KEY_PREFIX]
+                ?: BuildConfig.DEV_REGISTRY_PREFIX.ifBlank { DEFAULT_REGISTRY_PREFIX },
             follow = prefs[KEY_FOLLOW] ?: true,
             appliedRevision = prefs[KEY_REVISION] ?: NO_REVISION,
             receivedAt = prefs[KEY_RECEIVED_AT] ?: 0L,

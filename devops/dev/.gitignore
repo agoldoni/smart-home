@@ -1,0 +1,5 @@
+# Credenziali del broker di sviluppo
+.env
+
+# Generata da crea-password-mqtt.sh
+mosquitto/config/passwd

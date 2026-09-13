@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import it.agoldoni.smarthome.BuildConfig
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -23,13 +24,23 @@ private val Context.brokerDataStore: DataStore<Preferences> by preferencesDataSt
  */
 class BrokerSettingsStore(private val context: Context) {
 
+    /**
+     * Le impostazioni salvate, o i valori predefiniti della build.
+     *
+     * Il `?:` guarda se la **chiave esiste**, non se e' vuota, e la differenza e'
+     * tutto: [save] scrive sempre tutti i campi, quindi appena qualcuno tocca le
+     * impostazioni i predefiniti spariscono per sempre — anche se ha cancellato
+     * l'indirizzo apposta. Valgono solo su un'installazione che non e' mai stata
+     * configurata: nella build debug la mandano dritta allo stack di sviluppo,
+     * nella release sono stringhe vuote e non cambiano niente.
+     */
     val settings: Flow<BrokerSettings> = context.brokerDataStore.data.map { prefs ->
         BrokerSettings(
-            host = prefs[KEY_HOST].orEmpty(),
-            port = prefs[KEY_PORT] ?: DEFAULT_PORT,
+            host = prefs[KEY_HOST] ?: BuildConfig.DEV_BROKER_HOST,
+            port = prefs[KEY_PORT] ?: BuildConfig.DEV_BROKER_PORT.toIntOrNull() ?: DEFAULT_PORT,
             useTls = prefs[KEY_TLS] ?: false,
-            username = prefs[KEY_USERNAME].orEmpty(),
-            password = prefs[KEY_PASSWORD].orEmpty(),
+            username = prefs[KEY_USERNAME] ?: BuildConfig.DEV_BROKER_USER,
+            password = prefs[KEY_PASSWORD] ?: BuildConfig.DEV_BROKER_PASS,
             clientId = prefs[KEY_CLIENT_ID].orEmpty(),
         )
     }
