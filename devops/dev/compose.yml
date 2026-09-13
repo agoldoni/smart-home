@@ -9,7 +9,6 @@ services:
   broker:
     image: eclipse-mosquitto:2
     container_name: dev-broker
-    restart: unless-stopped
     # Da root mosquitto scende a uid 1883 e non leggerebbe piu' il file di
     # password, che appartiene all'utente host. Girando gia' come lui, legge.
     # Stessa riga dello stack di casa, stessa ragione.
@@ -32,7 +31,6 @@ services:
   prese-finte:
     image: eclipse-mosquitto:2
     container_name: dev-prese-finte
-    restart: unless-stopped
     depends_on:
       - broker
     environment:
@@ -50,6 +48,5 @@ services:
     build: ../../bridge/configuratore
     image: smart-home/configuratore:dev
     container_name: dev-configuratore
-    restart: unless-stopped
     ports:
       - "${CONFIGURATORE_PORT:-8080}:80"
