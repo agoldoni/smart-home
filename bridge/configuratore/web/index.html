@@ -19,7 +19,16 @@
 <main>
 
   <section id="pannello-collegamento">
-    <h2>Broker</h2>
+    <div class="testata">
+      <h2>Broker</h2>
+      <div class="azioni" id="collegato">
+        <span class="stato">
+          <span class="spia" aria-hidden="true"></span>
+          <span id="stato-broker"></span>
+        </span>
+        <button id="cambia" title="Chiude il collegamento e riapre i campi">Cambia</button>
+      </div>
+    </div>
     <form id="collegamento">
       <div class="campo"><label for="host">Indirizzo</label>
         <input id="host" type="text" placeholder="192.168.86.10" spellcheck="false" autocapitalize="off">

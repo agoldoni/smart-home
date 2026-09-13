@@ -46,12 +46,34 @@ section {
   margin-bottom: 16px;
 }
 
-/* Il registro compare solo a collegamento fatto: prima non c'e' niente da dire. */
+/* Il registro compare solo a collegamento fatto: prima non c'e' niente da dire.
+   E alla prima disconnessione risparisce, insieme al modulo: quello che resta
+   sullo schermo e' la sola card del broker, riaperta sui suoi campi. */
 #pannello-registro { display: none; }
 body[data-collegato="si"] #pannello-registro { display: block; }
 #modulo { display: none; }
 body[data-modulo="si"] #modulo { display: block; }
-body[data-modulo="si"] #pannello-registro { opacity: .45; pointer-events: none; }
+
+/* Col modulo aperto la card dei dispositivi si chiude come quella del broker:
+   restano il titolo, il topic e la riga della revisione, e il modulo sale
+   subito sotto invece di stare in fondo a un elenco di sette righe. Prima
+   l'elenco restava tutto li', spento a meta' — e su un telefono voleva dire
+   aprire "Aggiungi" e non vedere comparire niente. */
+body[data-modulo="si"] #elenco,
+body[data-modulo="si"] #pannello-registro details,
+body[data-modulo="si"] #aggiungi { display: none; }
+
+/* La card del broker fa il contrario: aperta finche' non c'e' un collegamento,
+   chiusa sulla riga di stato appena c'e'. Le due cose non stanno mai insieme —
+   i campi si cambiano scollegandosi, ed e' quello che fa il pulsante. */
+#collegato { display: none; }
+body[data-collegato="si"] #collegato { display: flex; }
+body[data-collegato="si"] #collegamento { display: none; }
+/* Il pallino non va mai a capo da solo: sta con la frase che qualifica. */
+#collegato .stato { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.spia { width: 9px; height: 9px; border-radius: 50%; background: var(--accento);
+        flex: none; }
+#stato-broker { font-size: .85rem; color: var(--tenue); overflow-wrap: anywhere; }
 
 .testata { display: flex; align-items: center; justify-content: space-between;
            gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }

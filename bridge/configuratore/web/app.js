@@ -13,6 +13,10 @@ import {
 
 const stato = {
   client: null,
+  // Il client esiste anche mentre riprova: `collegato` dice se in questo momento
+  // c'e' davvero un broker dall'altra parte, ed e' quello che decide cosa si vede.
+  collegato: false,
+  broker: '',
   prefisso: 'casa',
   topic: topicRegistro('casa'),
   dispositivi: [],
@@ -79,6 +83,11 @@ function collega(evento) {
   if (!host) return avviso('collegamento', 'Serve l’indirizzo del broker.');
   ricorda({ host, porta, utente, prefisso: stato.prefisso });
 
+  // Un collegamento di prima che stesse ancora riprovando parlerebbe con il
+  // broker vecchio mentre questo e' gia' in piedi: si chiude prima di aprire.
+  scollega('', '');
+  stato.broker = `${host}:${porta}`;
+
   avviso('collegamento', `Collegamento a ${host}:${porta}…`);
   // Client id casuale a ogni apertura. Per specifica MQTT un id identifica una
   // connessione sola: due schede con lo stesso nome si butterebbero fuori a
@@ -91,34 +100,102 @@ function collega(evento) {
     reconnectPeriod: 4000,
     connectTimeout: 8000,
   });
+  stato.client = client;
+
+  // Ogni gestore guarda prima di tutto se il client e' ancora quello buono: uno
+  // appena chiuso puo' emettere un ultimo evento, e non deve toccare il
+  // collegamento che gli e' subentrato.
+  const mio = () => stato.client === client;
 
   client.on('connect', () => {
-    stato.client = client;
-    avviso('collegamento', `Collegato a ${host}:${porta}.`, 'ok');
+    if (!mio()) return;
+    // Ci passa anche ogni riconnessione: la sottoscrizione si rifa', e il
+    // messaggio ritenuto ripopola da se' l'elenco che si era buttato.
+    stato.collegato = true;
+    avviso('collegamento', '');
     client.subscribe(stato.topic, { qos: 1 }, (err) => {
       if (err) avviso('collegamento', `Sottoscrizione fallita: ${err.message}`, 'errore');
     });
-    document.body.dataset.collegato = 'si';
     disegna();
   });
 
   client.on('message', (topic, payload) => {
-    if (topic !== stato.topic) return;
+    if (!mio() || topic !== stato.topic) return;
     arrivato(payload.toString());
   });
 
   client.on('error', (err) => {
+    if (!mio()) return;
     // Con credenziali sbagliate il broker chiude: si dice cosa ha risposto,
     // invece di lasciare una pagina vuota che sembra un caricamento lento.
-    avviso('collegamento', `Il broker ha rifiutato: ${err.message}`, 'errore');
-    client.end(true);
-    stato.client = null;
-    document.body.dataset.collegato = '';
+    scollega(`Il broker ha rifiutato: ${err.message}`);
   });
 
   client.on('close', () => {
-    if (stato.client) avviso('collegamento', 'Collegamento chiuso.', 'errore');
+    // Il client riprova da se' ogni reconnectPeriod, quindi non lo si butta: si
+    // torna alla sola card del broker e si aspetta li'.
+    if (mio() && stato.collegato) perdiCollegamento('Collegamento perso. Riprovo…');
   });
+}
+
+/**
+ * Quello che si sa del registro vale finche' dura il collegamento.
+ *
+ * Staccato il broker, l'elenco sullo schermo non e' piu' il registro: e' com'era
+ * l'ultima volta che qualcuno lo ha detto. Lasciarlo li' invita a modificarlo, e
+ * un riordino gia' in attesa partirebbe su una revisione che nel frattempo puo'
+ * essere diventata tre. Si butta tutto e lo si rilegge quando il broker
+ * ritorna: il messaggio ritenuto arriva da se', senza chiedere niente.
+ */
+function dimenticaRegistro() {
+  // L'ordine in attesa muore qui, e non e' un dettaglio: pubblicato dopo la
+  // caduta sarebbe un documento calcolato su un elenco che non si ha piu'.
+  annullaOrdine();
+  stato.collegato = false;
+  stato.dispositivi = [];
+  stato.revisione = 0;
+  stato.esiste = false;
+  stato.scartati = [];
+  avviso('registro', '');
+}
+
+/**
+ * Il collegamento e' caduto, ma il client sta gia' riprovando.
+ *
+ * Il dispositivo aperto nel modulo resta dov'e': e' lavoro digitato a mano, e la
+ * pagina lo ritrova appena il broker risponde. Nel frattempo non si vede, perche'
+ * scollegati non si vede niente che non sia la card del broker.
+ */
+function perdiCollegamento(testo) {
+  dimenticaRegistro();
+  avviso('collegamento', testo, 'errore');
+  ridisegna();
+}
+
+/**
+ * Il collegamento si chiude qui, e non riprova nessuno.
+ *
+ * A differenza di una caduta, questa e' una porta chiusa: il modulo aperto si
+ * perde insieme al resto, perche' chi rientra puo' rientrare su un altro
+ * prefisso — cioe' su un'altra casa, dove quel dispositivo non voleva andare.
+ */
+function scollega(testo, tono = 'errore') {
+  const client = stato.client;
+  stato.client = null;
+  if (client) client.end(true);
+  stato.modifica = null;
+  stato.errori = {};
+  stato.revisioneBase = null;
+  dimenticaRegistro();
+  avviso('collegamento', testo, tono);
+  ridisegna();
+}
+
+/** Riaprire i campi vuol dire scollegarsi: e' l'unico modo di cambiare broker. */
+function cambiaBroker() {
+  if (stato.modifica
+      && !confirm('C’è un dispositivo aperto: cambiando broker si perde quello che hai scritto.')) return;
+  scollega('Collegamento chiuso. Cambia quello che serve e ricollegati.', '');
 }
 
 /**
@@ -205,7 +282,7 @@ function arrivato(payload) {
  * la scrittura che tocca tutte le righe insieme.
  */
 function pubblica(dispositivi, base = null) {
-  if (!stato.client) return avviso('registro', 'Non sei collegato.', 'errore');
+  if (!stato.collegato) return avviso('registro', 'Non sei collegato.', 'errore');
   if (base !== null && stato.revisione !== base) {
     return avviso('registro', 'Il registro è cambiato nel frattempo: ricarica prima di sovrascrivere.', 'errore');
   }
@@ -505,8 +582,16 @@ function disegnaModelli() {
 }
 
 function disegna() {
+  // Scollegati non c'e' modulo che tenga, nemmeno se `stato.modifica` e' pieno:
+  // il documento aperto aspetta li' dentro che il broker torni.
+  document.body.dataset.collegato = stato.collegato ? 'si' : '';
+  document.body.dataset.modulo = stato.collegato && stato.modifica ? 'si' : '';
+  riempi(
+    $('stato-broker'),
+    'Collegato a ', el('code', {}, stato.broker),
+    ' · prefisso ', el('code', {}, stato.prefisso),
+  );
   $('topic-corrente').textContent = stato.topic;
-  document.body.dataset.modulo = stato.modifica ? 'si' : '';
   disegnaElenco();
   disegnaModelli();
   disegnaModulo();
@@ -542,6 +627,7 @@ function riprendi() {
 }
 
 $('collegamento').addEventListener('submit', collega);
+$('cambia').addEventListener('click', cambiaBroker);
 $('aggiungi').addEventListener('click', () => apriModulo(vuoto()));
 riprendi();
 disegna();

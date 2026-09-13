@@ -163,6 +163,21 @@ settimane su un telefono che ancora non esiste. È lo stesso meccanismo per cui 
 subito lo stato delle prese quando riapre: il broker tiene l'ultimo valore e lo consegna a
 chi si iscrive, senza che nessuno debba essere acceso nel frattempo.
 
+La pagina si apre sui campi del broker e non mostra altro: finché non c'è un
+collegamento non c'è niente da configurare. Appena c'è, la card si chiude su una riga —
+pallino, indirizzo, prefisso — e sotto compaiono i dispositivi; per cambiare broker o
+prefisso si preme **Cambia**, che scollega e riapre i campi. Se il collegamento cade
+succede da sé la stessa cosa: sparisce tutto e resta la card riaperta, con il motivo
+scritto sotto. Il client riprova da solo, e quando il broker torna il registro si rilegge
+dal messaggio ritenuto. Un elenco che resta a video mentre nessuno lo aggiorna non è un
+elenco, è una fotografia — e prima o poi qualcuno ci scrive sopra.
+
+La stessa cosa vale per l'elenco quando si apre un dispositivo: la card si chiude su
+titolo, topic e revisione, e il modulo prende il suo posto. Si riapre uscendo dal modulo,
+con **Salva** o con **Annulla**. Su un telefono è la differenza fra premere "Aggiungi" e
+vedere il modulo, e premerlo senza veder succedere niente perché il modulo era sette
+schede più in basso.
+
 Nell'app, **Impostazioni → Registro dei dispositivi**:
 
 - **Segui il registro** è acceso di partenza, ma finché un registro non arriva davvero non
