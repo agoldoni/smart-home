@@ -21,9 +21,14 @@ pulito. La versione è stata alzata a **1.1.0 (versionCode 9)**.
 | Dove | Stato |
 |---|---|
 | Broker di casa | listener websockets **9001** attivo, autenticato come il 1883 |
-| `sh-configuratore` | in piedi, **http://192.168.86.45:8080** |
+| `sh-configuratore` | in piedi, **http://192.168.86.2:8080** |
 | Registro sul broker | `casa/registro/dispositivi`, **7 prese, revisione 8** |
 | Telefono (build debug 1.1.0) | segue il registro, 7 dispositivi **adottati** con i loro id |
+
+**Dal 13 settembre 2026 lo stack gira sul Raspberry, `192.168.86.2`** (prima era il PC,
+`192.168.86.45`). Il registro ha attraversato il trasloco dentro `mosquitto.db` ed è sempre
+alla revisione 8. Le tre verifiche qui sotto vogliono tutte un telefono che punti al broker
+nuovo: cambiare l'host nelle impostazioni dell'app è il passo zero, per ciascuna.
 
 ### Verificato, e come
 

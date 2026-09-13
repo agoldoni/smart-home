@@ -34,9 +34,9 @@ consumi e stato. I nomi vengono dall'account Tuya:
 
 Gli indirizzi sono indicativi: il ponte segue le prese per id, non per IP.
 
-Finché lo stack sta su questo PC, che si spegne ogni sera, il controllo da remoto vale
-solo a PC acceso. È il motivo per cui prima o poi va su qualcosa di sempre acceso — vedi
-in fondo, è un `scp` e un `docker compose up`.
+Lo stack gira sul Raspberry `rpi4-smarthome` (`192.168.86.2`), che è sempre acceso: il
+controllo da remoto vale a qualunque ora, e un telefono nuovo trova il registro quando
+capita, invece che solo quando il PC era acceso. Vedi in fondo, *Dove gira*.
 
 ## Avvio
 
@@ -290,13 +290,13 @@ La catena di casa è a doppio NAT e va bucata a due livelli:
 ```
 Internet ──► ZTE H2640W        192.168.1.1     agoldoni.duckdns.org
                └──► Google Wifi  WAN 192.168.1.101 / LAN 192.168.86.1
-                       └──► questo PC 192.168.86.45
+                       └──► Raspberry 192.168.86.2
 ```
 
 1. **Sullo ZTE** (`http://192.168.1.1`): inoltra **UDP 51820 → 192.168.1.101**, e riserva
    quell'indirizzo al Google Wifi, altrimenti al primo riavvio la regola punta al vuoto.
 2. **Sul Google Wifi** (app Google Home, *Impostazioni → Rete → Avanzate → Port
-   forwarding*): inoltra **UDP 51820 → 192.168.86.45**, e riserva anche questo in DHCP.
+   forwarding*): inoltra **UDP 51820 → 192.168.86.2**, e riserva anche questo in DHCP.
 3. `docker compose --profile vpn up -d`, poi il QR per il telefono:
 
    ```bash
@@ -305,7 +305,7 @@ Internet ──► ZTE H2640W        192.168.1.1     agoldoni.duckdns.org
 
 Il peer nasce con `AllowedIPs = 192.168.86.0/24`: nel tunnel passa solo la LAN di casa, il
 resto del traffico del telefono esce normalmente. Il vantaggio è che l'app può puntare
-**sempre a `192.168.86.45`**, dentro e fuori casa, e il campo broker non si tocca mai.
+**sempre a `192.168.86.2`**, dentro e fuori casa, e il campo broker non si tocca mai.
 
 Il peer riceve anche `DNS = 192.168.86.1`, che sta dentro la rete instradata: col tunnel
 attivo i nomi li risolve il router di casa, e da fuori funzionano anche i `.lan`. Il rovescio
@@ -319,7 +319,7 @@ handshake regolare. Si può quindi lasciare WireGuard sempre attivo e non pensar
 
 Il prezzo è un giro a vuoto — il pacchetto esce fino allo ZTE e rientra — per raggiungere
 una macchina che sta a due metri. Se dà fastidio, l'app WireGuard di Android sa disattivarsi
-da sola sulla rete Wi-Fi di casa: in quel caso l'app punta comunque a `192.168.86.45`, che
+da sola sulla rete Wi-Fi di casa: in quel caso l'app punta comunque a `192.168.86.2`, che
 in LAN si raggiunge diretta. In un modo o nell'altro l'indirizzo del broker non cambia mai,
 ed è tutto il punto di questa scelta.
 
@@ -327,30 +327,48 @@ Il DDNS `agoldoni.duckdns.org` punta già all'IP giusto. Assicurati che qualcosa
 aggiornarlo quando Vodafone cambia indirizzo: se non c'è già un aggiornatore da qualche
 parte, il posto naturale è questo stack.
 
-## Spostarlo su un dispositivo sempre acceso
+## Dove gira
 
-Niente di speciale — è la ragione per cui è tutto in Docker:
+Sul Raspberry `rpi4-smarthome`, `192.168.86.2`, in `~/projects/smart-home/bridge` —
+traslocato dal PC il 13 settembre 2026. È la ragione per cui è tutto in Docker: la copia è
+un `rsync` e le immagini si ricostruiscono sul posto per arm64.
 
 ```bash
-rsync -a --exclude wireguard/ --exclude mosquitto/data/ bridge/ pi@casa:~/bridge/
-ssh pi@casa 'cd bridge && bash crea-password-mqtt.sh && docker compose up -d'
+# aggiornare il Pi dopo una modifica fatta qui
+rsync -a --exclude '__pycache__/' \
+      --exclude 'stato/' --exclude 'mosquitto/data/' --exclude 'wireguard/' \
+      bridge/ raspberry:projects/smart-home/bridge/
+ssh raspberry 'cd ~/projects/smart-home/bridge && docker compose up -d --build'
 ```
 
-Poi si sposta l'inoltro del Google Wifi sul nuovo indirizzo e si cambia il broker nell'app.
-Il ponte deve restare in `network_mode: host` e sulla stessa LAN delle prese: gli annunci
-in broadcast non attraversano né un bridge Docker né un router.
+**Le tre esclusioni non sono un dettaglio.** Sono i dati vivi del Pi — l'archivio dei
+consumi, i messaggi ritenuti col registro, i peer della VPN — e le copie rimaste sul PC
+sono ferme al giorno del trasloco. Un `rsync` senza esclusioni le rispedirebbe indietro,
+cancellando tutto quello che il Pi ha scritto da allora. Nel trasloco andavano copiate, da
+allora in poi mai più.
 
-Il configuratore viaggia con il resto, è un servizio dello stesso `compose.yml`. Due cose da
-verificare al primo avvio là sopra, e nessuna delle due lo riguarda:
+Il ponte resta in `network_mode: host` e sulla stessa LAN delle prese: gli annunci in
+broadcast non attraversano né un bridge Docker né un router.
 
-- **Sistema a 64 bit.** Mosquitto, nginx e `python:3.12-slim` sono multi-arch e non danno
-  problemi, ma il ponte si ricostruisce sul posto e `cryptography` ha le ruote precompilate
-  per `aarch64` e non per l'ARM a 32 bit, dove finirebbe a compilare Rust
-- **`PUID`/`PGID`**: l'utente predefinito è di norma 1000 e i default reggono, ma conviene
-  un `id` prima di copiare i volumi
+Nel trasloco sono passati anche i file che il `.gitignore` tiene fuori, e non per comodità:
 
-Con una macchina sempre accesa cade anche il limite che pesava di più sul registro: un
-telefono nuovo lo trova a qualunque ora, invece che solo quando il PC era acceso.
+- `mosquitto/data/mosquitto.db` porta i **messaggi ritenuti**, cioè il registro
+  `casa/registro/dispositivi`. Senza, il registro andrebbe rifatto dal configuratore, e nel
+  frattempo le app resterebbero coi dispositivi che hanno
+- `wireguard/` porta le **chiavi del server**. La chiave pubblica è quindi la stessa di
+  prima e l'endpoint dei peer è il nome DDNS, non un indirizzo: il profilo già sul telefono
+  continua a valere, senza QR nuovo
+- `stato/energia.db` è l'archivio dei consumi. Va copiato a ponte fermo e col WAL già
+  consolidato (`PRAGMA wal_checkpoint(TRUNCATE)`), altrimenti si copia un file a metà
+
+Quello che il trasloco **non** può fare da solo sta tutto fuori dal Pi:
+
+1. Sul Google Wifi, spostare l'inoltro **UDP 51820** sul nuovo indirizzo, altrimenti la VPN
+   da fuori non risponde più
+2. Sempre sul Google Wifi, **riservare `192.168.86.2` in DHCP**: il Pi lo prende in `auto`,
+   e un indirizzo che cambia è un broker che sparisce da tutti i telefoni insieme
+3. Su ogni telefono, scrivere il nuovo host del broker. Le coordinate del broker sono quello
+   che serve per *ricevere* il registro, quindi non possono arrivare dentro il registro
 
 ## Test
 
