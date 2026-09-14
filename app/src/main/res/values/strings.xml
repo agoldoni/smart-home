@@ -14,6 +14,11 @@
     <string name="action_configure">Configura</string>
     <string name="action_reconnect">Riconnetti</string>
 
+    <!-- L'azione della pressione prolungata su una scheda. TalkBack la annuncia
+         come "doppio tocco prolungato per…", quindi qui basta il verbo: il nome
+         del dispositivo lo legge gia' dalla scheda. -->
+    <string name="device_configure">Configura</string>
+
     <!-- Il lucchetto della vista principale. "view_" e non "registry_": il
          registro blocca il modulo di modifica, questo blocca i comandi, e
          confonderli sarebbe confondere due cose diverse. -->

@@ -57,8 +57,10 @@ condiviso*.
 ## Registrare un dispositivo
 
 Il pulsante **Aggiungi** apre il modulo — a meno che l'app non stia seguendo un registro,
-nel qual caso i dispositivi si modificano di là e qui si guardano soltanto. I campi che
-contano:
+nel qual caso i dispositivi si modificano di là e qui si guardano soltanto. Un dispositivo
+già registrato si riapre **tenendo premuta la sua scheda per tre secondi**: un tocco non
+porta da nessuna parte, perché è lo stesso gesto con cui si manca l'interruttore. I campi
+che contano:
 
 | Campo | A cosa serve |
 |---|---|

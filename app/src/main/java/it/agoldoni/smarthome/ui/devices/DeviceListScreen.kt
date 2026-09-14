@@ -6,7 +6,9 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -46,12 +48,18 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.PointerEventTimeoutCancellationException
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
@@ -397,6 +405,14 @@ private fun EmptyDevices(onAddDevice: () -> Unit, following: Boolean) {
     }
 }
 
+/**
+ * Quanto va tenuta premuta una scheda per aprire la configurazione. La pressione
+ * prolungata di sistema (mezzo secondo) qui sarebbe troppo poco: un elenco di
+ * schede si scorre tenendole sotto il dito, e mezzo secondo fermi prima di
+ * partire capita per caso. Tre secondi no.
+ */
+private const val HOLD_TO_CONFIGURE_MS = 3_000L
+
 @Composable
 private fun DeviceCard(
     item: DeviceUi,
@@ -416,6 +432,12 @@ private fun DeviceCard(
     // un ricordo, e la scheda lo scrive a parole invece di colorarsi.
     val powered = lastKnownOn && !item.state.unreachable
     val green = poweredColors()
+    val haptics = LocalHapticFeedback.current
+    val configureLabel = stringResource(R.string.device_configure)
+    // Il rilevatore del gesto non si riavvia a ogni ricomposizione, altrimenti
+    // uno stato che arriva dal broker mentre si tiene premuto azzererebbe il
+    // conteggio dei tre secondi: la chiave e' fissa e la lambda si aggiorna qui.
+    val openConfig by rememberUpdatedState(onEdit)
 
     val content = if (powered) green.content else MaterialTheme.colorScheme.onSurface
     val secondary = if (powered) green.content.copy(alpha = 0.75f) else MaterialTheme.colorScheme.onSurfaceVariant
@@ -424,7 +446,46 @@ private fun DeviceCard(
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .clickable(onClick = onEdit),
+            // La configurazione si apre tenendo premuta la scheda. Un tocco non
+            // porta piu' da nessuna parte: era lo stesso gesto con cui si manca
+            // l'interruttore, e finiva nel modulo di modifica invece che da
+            // nessuna parte.
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    // Il tocco che parte dall'interruttore o dal cursore
+                    // l'ha gia' consumato quel controllo, e qui non arriva:
+                    // tenere premuto l'interruttore non deve aprire la
+                    // configurazione e per giunta mandare un comando quando il
+                    // dito si alza. Si guarda solo il corpo della scheda.
+                    awaitFirstDown()
+                    val held = try {
+                        // Il dito che si alza chiude il blocco prima della
+                        // scadenza; lo scorrimento dell'elenco si prende gli
+                        // eventi e lo fa chiudere lo stesso. Si apre solo se a
+                        // arrivare per prima e' la scadenza.
+                        withTimeout(HOLD_TO_CONFIGURE_MS) { waitForUpOrCancellation() }
+                        false
+                    } catch (_: PointerEventTimeoutCancellationException) {
+                        true
+                    }
+                    if (held) {
+                        // Tre secondi senza un segnale sembrano un'app ferma:
+                        // la vibrazione dice che il gesto e' arrivato, e arriva
+                        // mentre il dito e' ancora giu'.
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        openConfig()
+                    }
+                }
+            }
+            // Il gesto vive dentro pointerInput, dove TalkBack non lo vede:
+            // questa riga lo dichiara come azione di pressione prolungata, che
+            // il lettore esegue subito senza contare tre secondi.
+            .semantics {
+                onLongClick(label = configureLabel) {
+                    openConfig()
+                    true
+                }
+            },
         colors = CardDefaults.cardColors(
             containerColor = if (powered) {
                 green.container
