@@ -284,6 +284,18 @@ class Copertura(unittest.TestCase):
             t += 2
         self.assertAlmostEqual(c.riga()[6], 0.67, places=2)
 
+    def test_integrando_un_ora_guardata_tutta_vale_uno(self):
+        # A potenza zero non si somma energia ma si somma tempo: "vista e ferma"
+        # e "non vista" devono restare due cose diverse, e a dirlo e' la
+        # copertura. Integrando e' anche la misura di quanta energia manca.
+        c = bridge.Contatore("prova", dp="17")
+        t = 3600.0
+        while t < 7200:
+            c.aggiorna(t, {"17": 5}, potenza_w=0.0)
+            t += 2
+        self.assertGreaterEqual(c.riga()[6], 0.99)
+        self.assertEqual(c.riga()[4], 0.0)
+
     def test_una_presa_mai_vista_non_ha_copertura(self):
         c = contatore()
         c.aggiorna(3600.0)
@@ -406,8 +418,13 @@ class PeriodiInLocale(unittest.TestCase):
         c.aggiorna(epoch(istante), {"17": 0})
         return c.periodi()
 
-    def test_prima_della_prima_lettura_non_si_sa_niente(self):
-        self.assertIsNone(contatore().periodi())
+    def test_prima_della_prima_lettura_valgono_i_periodi_di_adesso(self):
+        # `riga()` gia' la pensava cosi'; `periodi()` no, e la differenza si
+        # pagava all'avvio. Provata come coerenza fra le due, che e' l'invariante
+        # rotta, e non contro una data calcolata a parte nel test.
+        c = contatore()
+        giorno, _, _, _ = c.periodi()
+        self.assertEqual(giorno, c.riga()[2])
 
     def test_i_quattro_periodi_di_un_giorno_qualsiasi(self):
         # Sabato 12 settembre 2026, le 17 UTC: le 19 in Italia.
@@ -535,6 +552,18 @@ class PayloadDeiConsumi(unittest.TestCase):
         topic, payload = self.pubblicati[-1]
         self.assertEqual(topic, "casa/prova/energia")
         return json.loads(payload)
+
+    def test_all_avvio_i_totali_si_leggono_prima_della_prima_lettura(self):
+        # Il guasto vero, visto in casa il 14/09/2026: al riavvio `Memoria.riprendi`
+        # chiama `_rileggi_totali` su un contatore che non ha ancora letto niente.
+        # Senza i periodi, i totali restavano a zero fino alla prima ora chiusa e
+        # tutte e sette le prese pubblicavano kwh_oggi 0.0 con l'archivio pieno.
+        oggi = self.presa.contatore.riga()[2]
+        self._ora(oggi, 3, 700)
+        self.presa._rileggi_totali()
+        self.presa._pubblica_energia()
+        corpo = json.loads(self.pubblicati[-1][1])
+        self.assertAlmostEqual(corpo["kwh_oggi"], 0.7, places=3)
 
     def test_i_quattro_valori_e_le_quattro_date(self):
         self._ora("2026-09-11", 10, 2000)      # ieri

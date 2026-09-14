@@ -405,10 +405,14 @@ class Contatore:
         La settimana e' di calendario come il mese: riparte il lunedi'. Il difetto
         e' noto — il lunedi' mattina vale quanto oggi — ed e' lo stesso che il
         mese ha il primo del mese.
+
+        Prima della prima lettura vale l'ora corrente, esattamente come in
+        `riga()`, e non e' un dettaglio: all'avvio `_rileggi_totali` chiede i
+        periodi per interrogare l'archivio, e tornare None li' lasciava i totali
+        a zero fino alla prima ora chiusa — con l'archivio pieno li' accanto.
         """
-        if self._ora is None:
-            return None
-        locale = datetime.fromtimestamp(self._ora, timezone.utc).astimezone(self.fuso)
+        ora = self._ora if self._ora is not None else self._inizio_ora(time.time())
+        locale = datetime.fromtimestamp(ora, timezone.utc).astimezone(self.fuso)
         giorno = locale.date()
         # weekday(): lunedi' = 0, quindi sottrarlo porta al lunedi' della settimana.
         lunedi = giorno - timedelta(days=giorno.weekday())
@@ -574,10 +578,9 @@ class Presa(threading.Thread):
         self._pubblica_energia()
 
     def _rileggi_totali(self):
-        periodi = self.contatore.periodi()
-        if periodi is None or self.archivio is None:
+        if self.archivio is None:
             return
-        giorno, mese, ieri, lunedi = periodi
+        giorno, mese, ieri, lunedi = self.contatore.periodi()
         self._archivio_giorno = self.archivio.totale(self.nome, giorno)
         self._archivio_mese = self.archivio.totale(self.nome, mese)
         kwh, righe = self.archivio.somma(self.nome, ieri, ieri)
@@ -586,10 +589,7 @@ class Presa(threading.Thread):
         self._copertura = self.archivio.copertura(self.nome, giorno)
 
     def _pubblica_energia(self):
-        periodi = self.contatore.periodi()
-        if periodi is None:
-            return
-        giorno, mese, ieri, lunedi = periodi
+        giorno, mese, ieri, lunedi = self.contatore.periodi()
         parziale = self.contatore.kwh_parziale
         # L'ora in corso si somma ai tre periodi che contengono oggi. A ieri no:
         # e' un giorno chiuso, e sommargliela lo farebbe crescere durante la
