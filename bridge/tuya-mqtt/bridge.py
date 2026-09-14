@@ -231,23 +231,41 @@ class Archivio:
 
 
 class Contatore:
-    """L'energia di una presa, ora per ora.
+    """L'energia di una presa, ora per ora, integrando la potenza che misura.
 
-    Conta dal dp cumulativo della presa — che e' l'integrazione fatta da lei,
-    con le sue misure vere — e non dall'integrale della potenza che pubblichiamo
-    noi: quella resta ferma anche venti minuti, e integrarla sarebbe integrare un
-    numero vecchio. Il ripiego sull'integrale c'e' solo per le prese che il dp
-    cumulativo non ce l'hanno.
+    La scelta di partenza era l'altra, e sembrava la piu' solida: contare il dp
+    cumulativo (17), che e' l'integrazione fatta dalla presa con le sue misure
+    vere, invece della potenza, che resta ferma anche minuti interi e che
+    integrare pareva voler dire integrare un numero vecchio. Misurato contro
+    Smart Life il 14/09/2026, e' il contrario.
 
-    Il contatore della presa si azzera da solo (il cloud Tuya lo legge e lo
-    riporta a zero): un valore piu' basso del precedente non e' un errore, e' un
-    azzeramento, e quello che si e' letto e' tutto quel che ha contato da li'.
+    Il dp 17 non e' un totale: e' l'energia accumulata da quando il cloud Tuya
+    l'ha raccolta, e la presa lo azzera quando il cloud la interroga. Contarlo a
+    differenze regge solo se fra due letture nostre non ci sta un azzeramento, e
+    quel conto si fondava sul polling a due secondi. Ma la presa rinfresca il dp
+    17 nella risposta in LAN molto piu' di rado: il boiler a 1573 W l'ha tenuto
+    fermo oltre cinque minuti, e il frigorifero ha fatto un ciclo intero di
+    compressore senza muoverlo di una tacca. Ogni azzeramento si porta via un
+    ciclo di raccolta, non la frazione sotto la tacca: mancava un fattore 2,1.
+
+    La potenza invece e' un livello, non un accumulo: la presa la ripubblica
+    quando cambia, cioe' alle transizioni, ed e' esattamente quello che serve a
+    un carico a gradini. Tenerla ferma fino all'aggiornamento successivo non e'
+    un ripiego, e' il modo giusto di leggere quel dato; l'errore che resta e' il
+    ritardo della transizione, ed e' limitato.
+
+    Il conteggio dal dp 17 resta e si sceglie con `sorgente_preferita`: serve
+    alle prese che la potenza non la misurano, e a rileggere l'archivio vecchio.
     """
 
     def __init__(self, nome, dp="17", wh_per_tacca=1.0, fuso="Europe/Rome",
-                 buco_massimo=3600, pausa_massima=30):
+                 buco_massimo=3600, pausa_massima=30,
+                 sorgente_preferita="potenza"):
         self.nome = nome
         self.dp = str(dp) if dp else None
+        # Il dp resta configurato anche quando non lo si conta: la tabella dei
+        # fattori ne ha bisogno per far tornare le righe gia' in archivio.
+        self.integra_potenza = sorgente_preferita == "potenza"
         self.wh_per_unita = float(wh_per_tacca)
         self.fuso = ZoneInfo(fuso)
         # Oltre un'ora di silenzio la lettura fa da riferimento e non si somma:
@@ -255,7 +273,9 @@ class Contatore:
         # dentro la riga corrente sarebbe un numero falso in un posto preciso.
         self.buco_massimo = buco_massimo
         # Due letture piu' distanti di cosi' non fanno tempo coperto: la presa
-        # c'era anche allora, ma noi non la guardavamo.
+        # c'era anche allora, ma noi non la guardavamo. E' anche per quanto si
+        # tiene buono un campione di potenza, e il ciclo passa ogni due secondi:
+        # in servizio normale non morde, e quando morde si vede nella copertura.
         self.pausa_massima = pausa_massima
 
         self.sorgente = None
@@ -289,6 +309,16 @@ class Contatore:
             if intervallo < 0:
                 intervallo = None
 
+        if self.integra_potenza:
+            self._dalla_potenza(potenza_w, intervallo)
+        else:
+            self._dal_contatore(dps, potenza_w, intervallo)
+
+        self._ultimo_istante = adesso
+        return righe
+
+    def _dal_contatore(self, dps, potenza_w, intervallo):
+        """Le differenze del dp cumulativo. Sottostima: vedi la docstring."""
         valore = dps.get(self.dp) if self.dp else None
         if isinstance(valore, (int, float)) and not isinstance(valore, bool):
             self.sorgente = "dp" + self.dp
@@ -303,13 +333,15 @@ class Contatore:
             self._ultimo_valore = valore
         elif self.sorgente is None or self.sorgente == "integrale":
             # Nessun contatore: si integra la potenza, e la riga lo dichiara.
-            if potenza_w is not None:
-                self.sorgente = "integrale"
-                if intervallo is not None and intervallo <= self.pausa_massima:
-                    self._somma(potenza_w * intervallo / 3600.0, intervallo)
+            self._dalla_potenza(potenza_w, intervallo)
 
-        self._ultimo_istante = adesso
-        return righe
+    def _dalla_potenza(self, potenza_w, intervallo):
+        """Il livello misurato, tenuto fermo fino al campione successivo."""
+        if potenza_w is None:
+            return
+        self.sorgente = "integrale"
+        if intervallo is not None and intervallo <= self.pausa_massima:
+            self._somma(potenza_w * intervallo / 3600.0, intervallo)
 
     def _somma(self, quantita, intervallo):
         if quantita > 0:
@@ -351,8 +383,14 @@ class Contatore:
 
     @property
     def kwh_parziale(self):
-        """L'ora in corso, non ancora in archivio."""
-        return self._grezzo * self.wh_per_unita / 1000.0
+        """L'ora in corso, non ancora in archivio.
+
+        Il fattore e' quello della sorgente da cui si sta contando, esattamente
+        come nella tabella `fattori`: integrando, il grezzo e' gia' in Wh, e
+        applicargli una taratura pensata per le tacche del dp 17 lo sfalserebbe.
+        """
+        fattore = 1.0 if self.sorgente == "integrale" else self.wh_per_unita
+        return self._grezzo * fattore / 1000.0
 
     def periodi(self):
         """Giorno, mese, ieri e il lunedi' della settimana in corso, in locale.
@@ -395,6 +433,14 @@ class Contatore:
         if not stato or stato.get("ora") is None:
             return
         if time.time() - stato["ora"] >= 3600:
+            return
+        # Cambiare sorgente a meta' ora mescolerebbe tacche e Wh dentro la stessa
+        # riga, che ne dichiara una sola. Si riparte da zero: il prezzo e' l'ora
+        # in corso, una volta sola, e senza questo il contatore resterebbe muto
+        # (la sorgente salvata non e' "integrale" e il ripiego non scatterebbe).
+        if self.integra_potenza and stato.get("sorgente") not in (None, "integrale"):
+            log.info("%s: sorgente %s -> integrale, l'ora in corso riparte da zero",
+                     self.nome, stato.get("sorgente"))
             return
         self._ora = stato["ora"]
         self._grezzo = float(stato.get("grezzo") or 0.0)
@@ -803,6 +849,23 @@ class Memoria(threading.Thread):
 # avvio
 # --------------------------------------------------------------------------
 
+SORGENTI = ("potenza", "contatore")
+
+
+def sorgente_valida(valore, predefinito="potenza"):
+    """Normalizza `energia.sorgente`. Un refuso non deve spegnere le luci.
+
+    E nemmeno riportare di nascosto al conteggio che sottostima: si segnala e si
+    prosegue col predefinito, che e' l'integrale della potenza.
+    """
+    scelta = str(valore).strip().lower()
+    if scelta in SORGENTI:
+        return scelta
+    log.error("energia.sorgente: %r non e' fra %s, uso %r",
+              valore, " / ".join(SORGENTI), predefinito)
+    return predefinito
+
+
 def carica_config():
     with open(CONFIG, encoding="utf-8") as f:
         cfg = yaml.safe_load(f) or {}
@@ -850,6 +913,9 @@ def main():
     fuso = energia.get("fuso") or os.environ.get("TZ") or "Europe/Rome"
     dp_contatore = energia.get("dp_contatore", "17")
     wh_per_tacca = float(energia.get("wh_per_tacca", 1.0))
+    sorgente = sorgente_valida(energia.get("sorgente", "potenza"))
+    if archivio is not None:
+        log.info("energia contata da: %s", sorgente)
 
     prese = {}
     for voce in cfg["dispositivi"]:
@@ -860,6 +926,8 @@ def main():
                 dp=voce.get("dp_contatore", dp_contatore),
                 wh_per_tacca=float(voce.get("wh_per_tacca", wh_per_tacca)),
                 fuso=fuso,
+                sorgente_preferita=sorgente_valida(
+                    voce.get("sorgente", sorgente), sorgente),
             )
             # Le due righe di fattori si dichiarano subito, prima di sapere da
             # quale sorgente contera' questa presa: la vista e' un JOIN, e senza
@@ -869,6 +937,14 @@ def main():
                                           contatore.wh_per_unita)
             archivio.dichiara_fattore(contatore.nome, "integrale", 1.0)
         p = Presa(voce, opzioni, scoperta, mqttc, prefisso, qos, contatore, archivio)
+        # Integrare la potenza di una presa che la potenza non la misura vuol
+        # dire contare zero, e contare zero non si distingue da "non consuma".
+        if (contatore is not None and contatore.integra_potenza
+                and "potenza_w" not in p.letture):
+            log.warning("%s: integra la potenza ma non ha una lettura "
+                        "'potenza_w', quindi non contera' niente. Mappa il dp "
+                        "della potenza, o metti 'sorgente: contatore' su questa "
+                        "presa", p.nome)
         prese[p.nome] = p
 
     def on_connect(client, _userdata, _flags, motivo, _props=None):

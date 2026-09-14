@@ -27,12 +27,20 @@ tuya:
   soglia_lettura_lenta: 3        # oltre tanti secondi la lettura finisce nel log
 
   # L'energia si accumula qui e finisce in stato/energia.db, una riga per presa
-  # e per ora. Nell'archivio vanno le tacche del contatore della presa, non i
-  # kWh: il fattore qui sotto le trasforma in energia solo quando si legge,
-  # quindi tararlo fra sei mesi aggiusta anche i sei mesi gia' passati.
+  # e per ora. Nell'archivio va il conteggio grezzo e non i kWh: il fattore lo
+  # trasforma in energia solo quando si legge, quindi tararlo fra sei mesi
+  # aggiusta anche i sei mesi gia' passati.
   energia:
-    dp_contatore: 17             # dp con l'energia cumulata. Chi non ce l'ha (la pompa) ripiega sull'integrale della potenza
-    wh_per_tacca: 1.0            # DA TARARE: misurato 0,4-0,8, schema Tuya standard 1,0
+    # Da dove si conta. "potenza" integra il dp 19 misurato, "contatore" fa le
+    # differenze del dp 17. Il dp 17 sembrava la scelta solida e non lo e': e'
+    # l'energia accumulata dall'ultima raccolta del cloud Tuya, la presa lo
+    # azzera quando il cloud la interroga, e in LAN lo rinfresca troppo di rado
+    # perche' le nostre differenze lo seguano — ogni azzeramento si porta via un
+    # ciclo intero. Misurato il 14/09/2026 contro l'app Tuya: mancava un fattore
+    # 2,1. Il perche' per esteso sta nella docstring di Contatore, in bridge.py.
+    sorgente: potenza
+    dp_contatore: 17             # serve ancora ai fattori delle righe gia' in archivio
+    wh_per_tacca: 1.0            # solo per "contatore": DA TARARE, misurato 0,4-0,8
 
   # Tutte e sette misurano i consumi e usano gli stessi dp. Valgono per ogni
   # dispositivo che non abbia un suo blocco "letture".

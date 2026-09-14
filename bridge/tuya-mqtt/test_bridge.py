@@ -108,7 +108,9 @@ def epoch(iso):
 
 
 def contatore(**kw):
+    """Un contatore che conta dal dp 17: da chiedere, non e' piu' il predefinito."""
     kw.setdefault("dp", "17")
+    kw.setdefault("sorgente_preferita", "contatore")
     return bridge.Contatore("prova", **kw)
 
 
@@ -183,6 +185,84 @@ class ContatoreSenzaDpCumulativo(unittest.TestCase):
         c.aggiorna(1000, {}, potenza_w=3600)
         c.aggiorna(1000 + 600, {}, potenza_w=3600)
         self.assertEqual(c.riga()[4], 0.0)
+
+
+class SorgentePredefinita(unittest.TestCase):
+    """Dal 14/09/2026 si conta integrando la potenza, e il dp 17 va chiesto.
+
+    Il contrario sottostimava di un fattore due senza segnalare niente: le righe
+    c'erano, la copertura era piena, e a vederlo era solo il confronto con
+    l'app di Tuya.
+    """
+
+    def test_il_predefinito_integra_la_potenza_anche_se_il_dp_c_e(self):
+        c = bridge.Contatore("prova", dp="17")
+        c.aggiorna(1000, {"17": 10}, potenza_w=3600)
+        c.aggiorna(1010, {"17": 900}, potenza_w=3600)
+        self.assertEqual(c.sorgente, "integrale")
+        self.assertAlmostEqual(c.riga()[4], 10.0, places=3)
+
+    def test_il_dp_17_si_conta_solo_se_lo_si_chiede(self):
+        c = contatore()
+        c.aggiorna(1000, {"17": 10}, potenza_w=3600)
+        c.aggiorna(1002, {"17": 13}, potenza_w=3600)
+        self.assertEqual(c.sorgente, "dp17")
+        self.assertEqual(c.riga()[4], 3.0)
+
+    def test_un_refuso_non_riporta_di_nascosto_al_contatore(self):
+        self.assertEqual(bridge.sorgente_valida("Potenza "), "potenza")
+        self.assertEqual(bridge.sorgente_valida("contatore"), "contatore")
+        self.assertEqual(bridge.sorgente_valida("integrale"), "potenza")
+        self.assertEqual(bridge.sorgente_valida(None, "contatore"), "contatore")
+
+
+class CambioDiSorgente(unittest.TestCase):
+    """Il primo avvio dopo il cambio: lo stato salvato parla un'altra lingua."""
+
+    def _salvato(self, sorgente):
+        return {"ora": bridge.Contatore._inizio_ora(time.time()),
+                "grezzo": 500.0, "coperti": 1200.0,
+                "ultimo_valore": 128, "sorgente": sorgente}
+
+    def test_non_si_riprendono_le_tacche_dentro_una_riga_di_Wh(self):
+        c = bridge.Contatore("prova", dp="17")
+        c.riprendi(self._salvato("dp17"))
+        self.assertEqual(c.riga()[4], 0.0)
+
+    def test_dopo_il_cambio_il_contatore_non_resta_muto(self):
+        # Il guasto che si vedrebbe solo dalle somme: la sorgente salvata non e'
+        # "integrale", quindi il ripiego non scatterebbe mai e la presa
+        # conterebbe zero per sempre, senza una riga di log e con copertura piena.
+        c = bridge.Contatore("prova", dp="17")
+        c.riprendi(self._salvato("dp17"))
+        base = bridge.Contatore._inizio_ora(time.time()) + 10
+        c.aggiorna(base, {"17": 130}, potenza_w=3600)
+        c.aggiorna(base + 10, {"17": 130}, potenza_w=3600)
+        self.assertEqual(c.sorgente, "integrale")
+        self.assertAlmostEqual(c.riga()[4], 10.0, places=3)
+
+    def test_lo_stato_della_stessa_sorgente_si_riprende(self):
+        c = bridge.Contatore("prova", dp="17")
+        c.riprendi(self._salvato("integrale"))
+        self.assertEqual(c.riga()[4], 500.0)
+
+
+class FattoreDellOraInCorso(unittest.TestCase):
+    """`kwh_parziale` usa il fattore della sorgente, come fa la vista `energia`."""
+
+    def test_la_taratura_delle_tacche_vale_per_il_contatore(self):
+        c = contatore(wh_per_tacca=0.5)
+        c.aggiorna(1000, {"17": 0})
+        c.aggiorna(1002, {"17": 20})
+        self.assertAlmostEqual(c.kwh_parziale, 0.010, places=4)
+
+    def test_la_taratura_delle_tacche_non_tocca_l_integrale(self):
+        # Integrando, il grezzo e' gia' in Wh: moltiplicarlo per il fattore delle
+        # tacche sarebbe una taratura applicata a un numero che non la vuole.
+        c = bridge.Contatore("prova", dp="17", wh_per_tacca=0.5)
+        c.aggiorna(1000, {}, potenza_w=3600)
+        c.aggiorna(1010, {}, potenza_w=3600)
+        self.assertAlmostEqual(c.kwh_parziale, 0.010, places=4)
 
 
 class Copertura(unittest.TestCase):

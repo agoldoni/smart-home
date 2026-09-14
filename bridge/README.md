@@ -135,7 +135,7 @@ Le prese non pubblicano nessun consumo giornaliero, quindi lo accumula il ponte.
 ```json
 {"kwh_oggi":0.842,"kwh_ieri":2.104,"kwh_settimana":9.77,"kwh_mese":27.31,
  "giorno":"2026-09-12","ieri":"2026-09-11","settimana":"2026-09-08","mese":"2026-09",
- "sorgente":"dp17","copertura_oggi":0.98}
+ "sorgente":"integrale","copertura_oggi":0.98}
 ```
 
 I quattro totali sono **tre periodi che contengono adesso più uno chiuso**, e la differenza
@@ -165,22 +165,40 @@ un «ieri» sbagliato.
 
 `sorgente` dice da dove viene il numero e **non è un dettaglio**:
 
-- **`dp17`** — dal contatore interno della presa, che integra con le sue misure vere. Sei
-  prese su sette.
-- **`integrale`** — dai campioni di potenza che pubblichiamo noi, integrati nel tempo. Solo
-  la pompa, che il dp 17 non ce l'ha. Vale meno: le prese rinfrescano le misure a soglia, e
-  una potenza che resta ferma venti minuti integrata dà quello che dà.
+- **`integrale`** — dai campioni di potenza (dp 19), ognuno tenuto fermo fino al successivo.
+  È la sorgente normale, per tutte e sette.
+- **`dp17`** — dalle differenze del contatore interno della presa. Si chiede con
+  `energia.sorgente: contatore`, e serve a una presa che la potenza non la misuri.
 
-`copertura_oggi` è la frazione di giornata in cui il ponte ha davvero visto la presa. Un'ora
-in cui era irraggiungibile non va letta come un'ora di consumo basso, e con il dp 17 nemmeno
-come energia persa: la presa ha continuato a contare da sola e al ritorno il delta la
-restituisce — solo, finisce nell'ora in cui la si legge. Oltre un'ora di silenzio la lettura
-riparte da zero: meglio dichiarare persa un'ora che scaricare tre giorni di consumi dentro
-una riga sola.
+**Le due erano invertite fino al 14/09/2026**, e il dp 17 sembrava di gran lunga il più
+solido: è l'integrazione fatta dalla presa, con le sue misure vere. Non lo è. Il dp 17 è
+l'energia accumulata **dall'ultima raccolta del cloud Tuya**, e la presa lo azzera quando il
+cloud la interroga; contarlo a differenze regge solo se fra due letture nostre non ci sta un
+azzeramento, e quel conto si fondava sul polling a due secondi. Ma la presa rinfresca il dp
+17 in LAN molto più di rado — il boiler a 1573 W l'ha tenuto fermo oltre cinque minuti, il
+frigorifero ha fatto un ciclo intero di compressore senza muoverlo di una tacca — quindi
+ogni azzeramento si porta via un ciclo di raccolta intero, non la frazione sotto la tacca.
+Contro l'app Tuya mancava un fattore **2,1**: 0,76 kWh contro 1,62.
+
+La potenza invece è un livello, non un accumulo: la presa la ripubblica quando cambia, cioè
+alle transizioni, ed è esattamente quello che serve a un carico a gradini. Tenerla ferma
+fino all'aggiornamento successivo non è un ripiego, è il modo giusto di leggere quel dato;
+l'errore che resta è il ritardo della transizione, ed è limitato.
+
+`copertura_oggi` è la frazione di giornata in cui il ponte ha davvero visto la presa, e
+integrando la potenza è **anche** la misura di quanto manca: quello che è passato mentre non
+guardavamo non lo recupera nessuno, perché non c'è nessun accumulo da rileggere al ritorno.
+Un'ora a copertura bassa non va quindi letta come un'ora di consumo basso.
+
+Contando dal dp 17 era diverso — la presa contava da sola e al ritorno il delta la
+restituiva, solo che finiva nell'ora in cui la si legge — ma oltre un'ora di silenzio si
+ripartiva da zero comunque: meglio dichiarare persa un'ora che scaricare tre giorni di
+consumi dentro una riga sola.
 
 ### L'archivio
 
-`stato/energia.db`, una riga per presa e per ora. **Dentro ci sono le tacche, non i kWh:**
+`stato/energia.db`, una riga per presa e per ora. **Dentro c'è il conteggio grezzo, non i
+kWh** — Wh integrati se la sorgente è `integrale`, tacche del contatore se è `dp17`:
 
 ```sql
 CREATE TABLE energia_grezza (presa, inizio_utc, giorno, ora, grezzo, sorgente, copertura);
@@ -190,9 +208,10 @@ CREATE VIEW  energia AS   -- il join che moltiplica: è questo che si interroga
 ```
 
 Il conteggio è un fatto, il fattore che lo trasforma in energia è un'interpretazione, e
-stanno in due tabelle diverse. **Quanto valga una tacca del dp 17 non è confermato**: lo
-schema Tuya standard dice 1 Wh, le misure fatte qui danno 0,4–0,8. Tararlo dopo non è un
-problema perché non tocca l'archivio — si cambia `wh_per_tacca` in `dispositivi.yaml` e
+stanno in due tabelle diverse. Per `integrale` il fattore è 1 per costruzione — il grezzo è
+già in Wh — e resta da confermare solo per le righe `dp17`: **quanto valga una tacca non si
+sa**, lo schema Tuya standard dice 1 Wh, le misure fatte qui danno 0,4–0,8. Tararlo dopo non
+è un problema perché non tocca l'archivio — si cambia `wh_per_tacca` in `dispositivi.yaml` e
 dieci anni di righe cambiano valore insieme:
 
 ```bash
