@@ -98,3 +98,18 @@ else
     echo "[ERRORE] APK non trovato. Controlla i log sopra."
     exit 1
 fi
+
+# La debug finisce sul telefono senza un secondo comando, e si apre: si compila
+# per provare, e i due passi che mancavano erano sempre quelli. La release no --
+# quella si firma e si distribuisce, e installarla di nascosto sopra a quella in
+# uso sarebbe un effetto collaterale. NO_INSTALL=1 compila e basta.
+if [ "$BUILD_TYPE" = "debug" ] && [ "${NO_INSTALL:-0}" != "1" ]; then
+    echo ""
+    ESITO=0
+    "$PROJECT_DIR/install-all.sh" || ESITO=$?
+    if [ "$ESITO" = "2" ]; then
+        echo "[AVVISO] Nessun telefono collegato: l'APK resta qui, si installa dopo con ./install-all.sh"
+    elif [ "$ESITO" != "0" ]; then
+        exit "$ESITO"
+    fi
+fi

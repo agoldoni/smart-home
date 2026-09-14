@@ -348,12 +348,20 @@ faccia in tempo a leggere perché è caduto il collegamento.
 ## Build
 
 ```bash
-./build.sh              # debug
+./build.sh              # debug: compila, installa e apre l'app su ogni dispositivo adb collegato
 ./build.sh release      # pretende keystore e credenziali, vedi sotto
 ./build.sh clean
-./install-all.sh        # installa il debug su tutti i dispositivi adb collegati
+./install-all.sh        # solo installa e apre, senza ricompilare
 ./install-all.sh --build
+NO_INSTALL=1 ./build.sh # compila e basta
 ```
+
+La debug si installa da sé perché la si compila per provarla, e i due passi che mancavano
+erano sempre gli stessi. Senza telefono collegato è un avviso, non un errore: l'APK resta
+lì e `./install-all.sh` lo mette sul telefono quando c'è. La release invece non si installa
+mai da sola — quella si firma e si distribuisce, e scavalcare in silenzio quella in uso
+sarebbe un effetto collaterale. `./install-all.sh --no-open` installa senza portare l'app
+in primo piano.
 
 La JDK del progetto è fissata in `.sdkmanrc` (21) e la sceglie `build.sh` via SDKMAN: non
 serve cambiare quella di sistema, e non va invocato `./gradlew` a mano.
