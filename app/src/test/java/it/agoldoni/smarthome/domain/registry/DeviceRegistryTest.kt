@@ -20,7 +20,8 @@ private const val COMPLETO = """
   "topic_stato":"casa/frigorifero/stato","campo_stato":"stato",
   "topic_comando":"casa/frigorifero/comando","payload_on":"ON","payload_off":"OFF",
   "campo_potenza":"potenza_w","topic_energia":"casa/frigorifero/energia",
-  "campo_kwh_oggi":"kwh_oggi","campo_kwh_mese":"kwh_mese",
+  "campo_kwh_oggi":"kwh_oggi","campo_kwh_ieri":"kwh_ieri",
+  "campo_kwh_settimana":"kwh_settimana","campo_kwh_mese":"kwh_mese",
   "topic_disponibilita":"casa/frigorifero/disponibilita",
   "payload_disponibile":"online","payload_non_disponibile":"offline",
   "topic_stato_livello":null,"topic_comando_livello":null,"campo_livello":null,
@@ -44,6 +45,9 @@ class ParseRegistryTest {
         assertEquals("potenza_w", d.powerJsonKey)
         assertEquals("casa/frigorifero/energia", d.energyTopic)
         assertEquals("kwh_oggi", d.energyTodayJsonKey)
+        assertEquals("kwh_ieri", d.energyYesterdayJsonKey)
+        assertEquals("kwh_settimana", d.energyWeekJsonKey)
+        assertEquals("kwh_mese", d.energyMonthJsonKey)
         assertEquals("casa/frigorifero/disponibilita", d.availabilityTopic)
         assertEquals(1, d.qos)
         assertTrue(registro.skipped.isEmpty())
@@ -64,6 +68,27 @@ class ParseRegistryTest {
         assertEquals(false, d.retained)
         assertNull(d.stateJsonKey)
         assertNull(d.availabilityTopic)
+    }
+
+    @Test
+    fun `un registro scritto prima della 005 non porta ieri e la settimana`() {
+        // Sul broker c'e' un ritenuto solo, e puo' essere stato scritto da un
+        // configuratore piu' vecchio di questa app. I due campi che non ci sono
+        // restano vuoti, e soprattutto il dispositivo **non** viene saltato: e'
+        // la meta' additiva del contratto, quella che si verifica da questa parte.
+        val registro = ok(
+            """{"schema":1,"revisione":1,"dispositivi":[
+               {"uuid":"a","nome":"frigorifero","tipo":"SWITCH",
+                "topic_stato":"casa/frigorifero/stato","topic_comando":"casa/frigorifero/comando",
+                "topic_energia":"casa/frigorifero/energia","campo_kwh_oggi":"kwh_oggi",
+                "campo_kwh_mese":"kwh_mese"}]}""",
+        )
+        val d = registro.devices.single()
+        assertEquals("kwh_oggi", d.energyTodayJsonKey)
+        assertEquals("kwh_mese", d.energyMonthJsonKey)
+        assertNull(d.energyYesterdayJsonKey)
+        assertNull(d.energyWeekJsonKey)
+        assertTrue(registro.skipped.isEmpty())
     }
 
     @Test

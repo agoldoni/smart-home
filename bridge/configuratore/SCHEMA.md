@@ -42,6 +42,8 @@ Ne discende un nome riservato: dentro un prefisso, **nessun dispositivo può chi
       "campo_potenza": "potenza_w",
       "topic_energia": "casa/frigorifero/energia",
       "campo_kwh_oggi": "kwh_oggi",
+      "campo_kwh_ieri": "kwh_ieri",
+      "campo_kwh_settimana": "kwh_settimana",
       "campo_kwh_mese": "kwh_mese",
       "topic_disponibilita": "casa/frigorifero/disponibilita",
       "payload_disponibile": "online",
@@ -81,6 +83,8 @@ Ne discende un nome riservato: dentro un prefisso, **nessun dispositivo può chi
 | `campo_potenza` | stringa/null | no | `null` | Watt istantanei dentro il payload dello stato |
 | `topic_energia` | stringa/null | no | `null` | Consumi accumulati |
 | `campo_kwh_oggi` | stringa/null | se c'è `topic_energia` | `null` | — |
+| `campo_kwh_ieri` | stringa/null | no | `null` | Il giorno solare precedente. Può mancare nel payload: vedi sotto |
+| `campo_kwh_settimana` | stringa/null | no | `null` | La settimana **di calendario** in corso, da lunedì |
 | `campo_kwh_mese` | stringa/null | no | `null` | — |
 | `topic_disponibilita` | stringa/null | no | `null` | Dove si dichiara vivo. `null` = non lo dichiara, e l'app non finge di saperlo |
 | `payload_disponibile` / `payload_non_disponibile` | stringa | no | `online` / `offline` | — |
@@ -112,6 +116,8 @@ Sono la parte che conta più dei nomi dei campi.
 | `posizione` assente, negativa, non intera o non numerica | vale come **assente**: il dispositivo va in fondo, per nome. Mai zero — zero lo metterebbe in cima |
 | `posizione` ripetuta su più dispositivi | si applicano tutti, e fra loro si ordinano per nome |
 | Campo sconosciuto dentro un dispositivo valido | **ignorato** |
+| Campo dei consumi dichiarato, ma **la chiave manca** nel payload | il valore torna a «non si sa»: la scheda mostra un segnaposto, non l'ultimo numero letto |
+| Campo dei consumi dichiarato, chiave presente ma **illeggibile** | si tiene l'ultimo valore noto: da un valore che non si è capito non si deduce niente |
 | Campo noto di tipo sbagliato | si usa il predefinito, se ne ha uno; altrimenti il dispositivo è saltato |
 
 Sotto c'è una regola sola, ed è la stessa che l'app applica già ai payload di disponibilità:

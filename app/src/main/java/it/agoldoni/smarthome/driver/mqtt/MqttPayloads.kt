@@ -60,6 +60,53 @@ internal fun readNumber(payload: String, path: String): Double? =
     extractJson(payload, path)?.trim()?.toDoubleOrNull()
 
 /**
+ * Il valore di un campo numerico dentro un payload che e una **fotografia**.
+ *
+ * Tre esiti, e servono tutti e tre:
+ *
+ * - **il numero**, quando la chiave c'e e dentro c'e un numero
+ * - **null**, quando il payload e un oggetto JSON che quella chiave non ce l'ha,
+ *   o ce l'ha a `null`: vuol dire che quel valore non lo sa nessuno
+ * - **[previous]**, quando non c'e niente da concludere: il campo non e
+ *   dichiarato, il payload non e un oggetto JSON, oppure la chiave c'e ma dentro
+ *   non c'e un numero
+ *
+ * La differenza fra il secondo e il terzo caso e tutto il senso di questa
+ * funzione, e non e' un cavillo. Il topic dei consumi lo pubblica un produttore
+ * solo, per intero e ritenuto: se `kwh_ieri` non c'e, e perche nessuno sa quanto
+ * si sia consumato ieri — tenere l'ultimo numero letto mostrerebbe per sempre un
+ * giorno sbagliato, e nessuno andrebbe a verificarlo. Ma un payload che non si e
+ * capito non e una fotografia, e da quello non si deduce niente: e la stessa
+ * regola che vale per i payload di disponibilita.
+ *
+ * Non va usata sui payload dello stato, che arrivano anche **parziali** — col
+ * solo campo che e cambiato — e dove una chiave assente non significa niente.
+ */
+internal fun readSnapshotNumber(payload: String, path: String?, previous: Double?): Double? {
+    val key = path?.takeIf { it.isNotBlank() } ?: return previous
+    val parent = jsonParent(payload, key) ?: return previous
+    val leaf = key.substringAfterLast('.')
+    val value = parent.opt(leaf)
+    if (value == null || value == JSONObject.NULL) return null
+    return value.toString().trim().toDoubleOrNull() ?: previous
+}
+
+/** L'oggetto che contiene l'ultimo segmento del percorso, o null se non ci si arriva. */
+private fun jsonParent(payload: String, path: String): JSONObject? {
+    val trimmed = payload.trim()
+    if (!trimmed.startsWith("{")) return null
+    return try {
+        var node = JSONObject(trimmed)
+        path.split('.').dropLast(1).forEach { key ->
+            node = node.optJSONObject(key) ?: return null
+        }
+        node
+    } catch (e: JSONException) {
+        null
+    }
+}
+
+/**
  * Decide se un payload di disponibilita dica "ci sono" o "non ci sono".
  *
  * Restituisce null quando non dice ne l'una ne l'altra cosa: da un valore che

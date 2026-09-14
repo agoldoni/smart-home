@@ -77,7 +77,20 @@ dell'app, che li riconosce per uuid e non per nome.
 ## Il registro
 
 Il broker non ha persistenza, quindi il registro **va ripubblicato a ogni
-`docker compose up`**: è il comando `mosquitto_pub` qui sopra. Il configuratore su
+`docker compose up`**: è il comando `mosquitto_pub` qui sopra.
+
+**Se il telefono non vede il registro nuovo, guarda la revisione prima di tutto il
+resto.** Un'app che ha già applicato la revisione N ignora *senza rumore* un
+documento di revisione minore o uguale, e la cosa non lascia traccia da nessuna
+parte: sembra solo che i campi nuovi non arrivino. Sul broker di sviluppo scrive
+anche il configuratore web, che a ogni salvataggio incrementa per conto suo, quindi
+il numero predefinito del generatore invecchia in fretta. Si legge quello applicato
+e si pubblica più in alto:
+
+```bash
+python3 tools/debug-api.py --adb registry          # campo "revision"
+node devops/dev/genera-registro-dev.mjs devops/dev/registro-dev.json --revisione 17
+``` Il configuratore su
 <http://localhost:8080> lo legge e lo riscrive come farebbe a casa, ed è anche il
 modo di provare il configuratore stesso.
 

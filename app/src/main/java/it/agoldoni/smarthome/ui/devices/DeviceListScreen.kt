@@ -532,12 +532,25 @@ private fun DeviceCard(
                     // appiccicarli alla riga dello stato la rende illeggibile
                     // proprio sulle schede che hanno piu da dire.
                     energyLine(item)?.let { consumi ->
+                        // Quello che si legge e quello che si sente sono due cose
+                        // diverse, ed e la sola concessione che la riga compatta
+                        // si puo permettere. Sullo schermo l'ordine delle caselle
+                        // basta, perche si vede; in un lettore di schermo le
+                        // barre non si sentono, e "zero virgola quarantadue
+                        // barra uno virgola ottantasette" non lo capirebbe
+                        // nessuno. Le etichette qui non costano una riga.
+                        val parlato = energySpoken(item)
                         Text(
                             text = consumi,
                             style = MaterialTheme.typography.bodySmall,
                             color = faded,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
+                            modifier = if (parlato == null) {
+                                Modifier
+                            } else {
+                                Modifier.semantics { contentDescription = parlato }
+                            },
                         )
                     }
                 }
@@ -612,23 +625,36 @@ private fun statusLine(item: DeviceUi): String {
 }
 
 /**
- * I kWh accumulati, quando qualcuno li conta. Il mese si mostra solo se c'e:
- * il primo del mese e il totale di oggi, e ripeterlo due volte sarebbe rumore.
+ * I kWh accumulati, quando qualcuno li conta: `0,42/1,87/6,30/12,7 kWh`.
+ *
+ * Quattro caselle in ordine fisso — oggi, ieri, settimana, mese — e nessuna
+ * etichetta. L'ordine si impara una volta e poi non si legge piu: si guarda se
+ * il primo numero e piu grande del secondo, che e la domanda vera. Una casella
+ * di cui non si sa niente porta un trattino e **resta al suo posto**.
+ *
+ * La regola vive in [energiaCompatta], che non e una `@Composable` apposta: e
+ * la parte che si prova per casi.
  */
 @Composable
 private fun energyLine(item: DeviceUi): String? {
-    val oggi = item.state.kwhToday ?: return null
-    val mese = item.state.kwhMonth
-    return if (mese != null && mese > oggi) {
-        stringResource(R.string.state_energy, formatKwh(oggi), formatKwh(mese))
-    } else {
-        stringResource(R.string.state_energy_today, formatKwh(oggi))
-    }
+    val consumi = energiaCompatta(item.state, stringResource(R.string.state_energy_missing))
+        ?: return null
+    return stringResource(R.string.state_energy, consumi)
 }
 
-/** Sotto i dieci kWh due decimali, sopra uno: un boiler non fa 47,83 kWh, fa 47,8. */
-private fun formatKwh(kwh: Double): String =
-    String.format(Locale.getDefault(), if (kwh < 10) "%.2f" else "%.1f", kwh)
+/** Gli stessi quattro numeri, con le etichette, per chi la scheda se la fa leggere. */
+@Composable
+private fun energySpoken(item: DeviceUi): String? {
+    val valori = consumiFormattati(item.state) ?: return null
+    val ignoto = stringResource(R.string.state_energy_missing_spoken)
+    return stringResource(
+        R.string.state_energy_spoken,
+        valori[0] ?: ignoto,
+        valori[1] ?: ignoto,
+        valori[2] ?: ignoto,
+        valori[3] ?: ignoto,
+    )
+}
 
 /**
  * Sotto i dieci watt il decimale conta: fra 0,0 e 3,0 W passa la differenza fra

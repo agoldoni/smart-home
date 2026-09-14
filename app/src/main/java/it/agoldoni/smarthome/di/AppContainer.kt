@@ -9,6 +9,7 @@ import it.agoldoni.smarthome.data.local.MIGRATION_2_3
 import it.agoldoni.smarthome.data.local.MIGRATION_3_4
 import it.agoldoni.smarthome.data.local.MIGRATION_4_5
 import it.agoldoni.smarthome.data.local.MIGRATION_5_6
+import it.agoldoni.smarthome.data.local.MIGRATION_6_7
 import it.agoldoni.smarthome.data.local.SmartHomeDatabase
 import it.agoldoni.smarthome.data.settings.BrokerSettingsStore
 import it.agoldoni.smarthome.data.settings.RegistryStore
@@ -43,7 +44,8 @@ class AppContainer(context: Context) {
 
     private val database: SmartHomeDatabase by lazy {
         Room.databaseBuilder(applicationContext, SmartHomeDatabase::class.java, "smart-home.db")
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5,
+                MIGRATION_5_6, MIGRATION_6_7)
             .build()
     }
 

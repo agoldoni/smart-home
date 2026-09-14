@@ -186,8 +186,13 @@ fun DeviceEditScreen(
                 helper = stringResource(R.string.helper_energy_topic),
                 enabled = !state.readOnly,
             )
-            // Le due chiavi servono solo a chi ha un topic dei consumi: senza,
-            // sarebbero due caselle che non governano niente.
+            // Le quattro chiavi servono solo a chi ha un topic dei consumi: senza,
+            // sarebbero quattro caselle che non governano niente.
+            //
+            // Sono disposte come si vedono sulla scheda — oggi, ieri, settimana,
+            // mese — e non e' un vezzo: chi compila queste caselle e' la stessa
+            // persona che poi legge quella riga, e due ordini diversi sarebbero
+            // due cose da tenere a mente invece di una.
             if (form.energyTopic.isNotBlank()) {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     FormField(
@@ -195,6 +200,24 @@ fun DeviceEditScreen(
                         onValueChange = { value -> viewModel.edit { it.copy(energyTodayJsonKey = value) } },
                         label = stringResource(R.string.field_energy_today_json_key),
                         error = state.energyTodayJsonKeyError,
+                        modifier = Modifier.weight(1f),
+                        enabled = !state.readOnly,
+                    )
+                    FormField(
+                        value = form.energyYesterdayJsonKey,
+                        onValueChange = { value ->
+                            viewModel.edit { it.copy(energyYesterdayJsonKey = value) }
+                        },
+                        label = stringResource(R.string.field_energy_yesterday_json_key),
+                        modifier = Modifier.weight(1f),
+                        enabled = !state.readOnly,
+                    )
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    FormField(
+                        value = form.energyWeekJsonKey,
+                        onValueChange = { value -> viewModel.edit { it.copy(energyWeekJsonKey = value) } },
+                        label = stringResource(R.string.field_energy_week_json_key),
                         modifier = Modifier.weight(1f),
                         enabled = !state.readOnly,
                     )

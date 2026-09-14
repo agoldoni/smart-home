@@ -25,6 +25,8 @@ export const MODELLI = [
       payload_non_disponibile: 'offline',
       topic_energia: `${prefisso}/${nome}/energia`,
       campo_kwh_oggi: 'kwh_oggi',
+      campo_kwh_ieri: 'kwh_ieri',
+      campo_kwh_settimana: 'kwh_settimana',
       campo_kwh_mese: 'kwh_mese',
       qos: 1,
     }),

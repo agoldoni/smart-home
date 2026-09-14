@@ -133,9 +133,35 @@ Le prese non pubblicano nessun consumo giornaliero, quindi lo accumula il ponte.
 `casa/<nome>/energia` porta i totali correnti:
 
 ```json
-{"kwh_oggi":0.842,"kwh_mese":27.31,"giorno":"2026-09-12","mese":"2026-09",
+{"kwh_oggi":0.842,"kwh_ieri":2.104,"kwh_settimana":9.77,"kwh_mese":27.31,
+ "giorno":"2026-09-12","ieri":"2026-09-11","settimana":"2026-09-08","mese":"2026-09",
  "sorgente":"dp17","copertura_oggi":0.98}
 ```
+
+I quattro totali sono **tre periodi che contengono adesso più uno chiuso**, e la differenza
+si vede nei numeri:
+
+| Campo | Da quando | L'ora in corso |
+|---|---|---|
+| `kwh_oggi` | mezzanotte locale | **compresa** |
+| `kwh_ieri` | il giorno solare precedente, tutto | no: è un giorno chiuso, e sommargliela lo farebbe crescere durante la giornata |
+| `kwh_settimana` | **lunedì** locale, settimana di calendario come il mese | compresa |
+| `kwh_mese` | il primo del mese | compresa |
+
+Le tre date accanto — `ieri`, `settimana`, `mese` — dicono a cosa si riferiscono i numeri, e
+`settimana` è il lunedì da cui si conta. Servono a guardare un payload e capirlo senza avere
+un calendario sotto mano; nessuno ci prende decisioni.
+
+**`kwh_ieri` può mancare, e quando manca vuol dire qualcosa.** È l'unico dei quattro fatto di
+sole ore chiuse: se nell'archivio non c'è nemmeno una riga di ieri — una presa aggiunta
+stamattina, un ponte che ieri non girava — la chiave **non viene pubblicata** invece di
+valere zero. Zero è la risposta di una presa che c'era e non ha consumato, e le due cose non
+si scrivono uguali. Chi legge mostri un segnaposto, non un numero.
+
+La settimana riparte il lunedì, e il lunedì vale quasi quanto `kwh_oggi`: è di proposito, ed
+è lo stesso che fa `kwh_mese` il primo del mese. Il confine è nel fuso locale, non in UTC, e
+i giorni si contano sulle **date** — i due giorni l'anno da 23 e 25 ore darebbero altrimenti
+un «ieri» sbagliato.
 
 `sorgente` dice da dove viene il numero e **non è un dettaglio**:
 
@@ -221,7 +247,8 @@ A mano, nel modulo *Aggiungi* dell'app, per ciascuna:
 | Topic di comando | `casa/boiler/comando` |
 | Payload acceso / spento | `ON` / `OFF` |
 | Topic dei consumi | `casa/boiler/energia` |
-| Campo JSON dei kWh di oggi / del mese | `kwh_oggi` / `kwh_mese` |
+| Campo JSON dei kWh di oggi / ieri | `kwh_oggi` / `kwh_ieri` |
+| Campo JSON dei kWh della settimana / del mese | `kwh_settimana` / `kwh_mese` |
 | Comandi ritenuti | no |
 
 Nelle impostazioni del broker vanno indirizzo, porta 1883 e le credenziali di `.env`.

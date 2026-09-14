@@ -20,11 +20,17 @@ data class DeviceState(
      */
     val watts: Double? = null,
     /**
-     * Energia accumulata in kWh: oggi e nel mese in corso. Arrivano da chi
-     * conta, non dalla presa, e restano null per i dispositivi che non hanno
-     * nessuno che conti per loro.
+     * Energia accumulata in kWh: oggi, ieri, la settimana e il mese in corso.
+     * Arrivano da chi conta, non dalla presa, e restano null per i dispositivi
+     * che non hanno nessuno che conti per loro.
+     *
+     * Anche qui zero e null sono cose diverse, e sulla scheda si vedono diverse:
+     * zero e un dispositivo che non ha consumato, null e un numero che nessuno
+     * ha detto — una presa aggiunta stamattina un ieri non ce l'ha.
      */
     val kwhToday: Double? = null,
+    val kwhYesterday: Double? = null,
+    val kwhWeek: Double? = null,
     val kwhMonth: Double? = null,
     val updatedAt: Long? = null,
     /**

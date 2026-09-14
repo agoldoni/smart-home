@@ -180,6 +180,8 @@ private fun leggiDispositivo(voce: JSONObject, indice: Int, visti: Set<String>):
             powerJsonKey = voce.testo("campo_potenza"),
             energyTopic = voce.testo("topic_energia"),
             energyTodayJsonKey = voce.testo("campo_kwh_oggi"),
+            energyYesterdayJsonKey = voce.testo("campo_kwh_ieri"),
+            energyWeekJsonKey = voce.testo("campo_kwh_settimana"),
             energyMonthJsonKey = voce.testo("campo_kwh_mese"),
             availabilityTopic = voce.testo("topic_disponibilita"),
             payloadAvailable = voce.testo("payload_disponibile") ?: "online",

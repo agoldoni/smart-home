@@ -24,7 +24,7 @@ import select
 import sqlite3
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 import paho.mqtt.client as mqtt
@@ -205,6 +205,23 @@ class Archivio:
                 (presa, prefisso + "%")).fetchone()
         return round(somma, 4)
 
+    def somma(self, presa, dal, al):
+        """kWh fra due giorni compresi, e **quante righe** li hanno prodotti.
+
+        Il numero di righe non e' un di piu': zero righe e somma zero sono cose
+        diverse. Zero vuol dire "non ha consumato", nessuna riga vuol dire "non
+        c'era nessuno a contare", e pubblicarle uguali direbbe una bugia su una
+        presa aggiunta stamattina. `totale()` qui sopra non puo' distinguerle,
+        perche' il suo COALESCE le appiattisce tutte e due su zero — e va bene
+        cosi' per il giorno e per il mese, che l'ora in corso ce l'hanno sempre.
+        """
+        with self._lock:
+            kwh, righe = self._db.execute(
+                "SELECT COALESCE(SUM(kwh), 0), COUNT(*) FROM energia "
+                "WHERE presa = ? AND giorno BETWEEN ? AND ?",
+                (presa, dal, al)).fetchone()
+        return round(kwh, 4), righe
+
     def copertura(self, presa, prefisso):
         with self._lock:
             media, = self._db.execute(
@@ -337,11 +354,30 @@ class Contatore:
         """L'ora in corso, non ancora in archivio."""
         return self._grezzo * self.wh_per_unita / 1000.0
 
-    def oggi(self):
+    def periodi(self):
+        """Giorno, mese, ieri e il lunedi' della settimana in corso, in locale.
+
+        L'aritmetica si fa sulle **date**, non sui secondi. `_ora - 86400` sarebbe
+        il giorno prima trecentosessantatre volte l'anno: le altre due — l'ultima
+        domenica di marzo e quella di ottobre — durano 23 e 25 ore, e darebbero
+        un "ieri" sbagliato proprio nei due giorni in cui nessuno andrebbe a
+        controllare. `timedelta` su un `date` conta giorni di calendario, ed e'
+        per questo che la conversione in locale viene **prima** della sottrazione.
+
+        La settimana e' di calendario come il mese: riparte il lunedi'. Il difetto
+        e' noto — il lunedi' mattina vale quanto oggi — ed e' lo stesso che il
+        mese ha il primo del mese.
+        """
         if self._ora is None:
-            return None, None
+            return None
         locale = datetime.fromtimestamp(self._ora, timezone.utc).astimezone(self.fuso)
-        return locale.strftime("%Y-%m-%d"), locale.strftime("%Y-%m")
+        giorno = locale.date()
+        # weekday(): lunedi' = 0, quindi sottrarlo porta al lunedi' della settimana.
+        lunedi = giorno - timedelta(days=giorno.weekday())
+        return (giorno.strftime("%Y-%m-%d"),
+                locale.strftime("%Y-%m"),
+                (giorno - timedelta(days=1)).strftime("%Y-%m-%d"),
+                lunedi.strftime("%Y-%m-%d"))
 
     # -- memoria fra un avvio e l'altro -----------------------------------
 
@@ -417,6 +453,12 @@ class Presa(threading.Thread):
         self._ultima_energia = None
         self._archivio_giorno = 0.0
         self._archivio_mese = 0.0
+        self._archivio_settimana = 0.0
+        # None e non 0.0, ed e' tutta la differenza: ieri e' fatto di sole ore
+        # chiuse, quindi un archivio senza righe non dice "non ha consumato",
+        # dice che non lo sa. Uno zero pubblicato al posto di questo None
+        # sarebbe una bugia sulla presa aggiunta stamattina.
+        self._archivio_ieri = None
         self._copertura = None
 
     # -- topic ------------------------------------------------------------
@@ -486,25 +528,37 @@ class Presa(threading.Thread):
         self._pubblica_energia()
 
     def _rileggi_totali(self):
-        giorno, mese = self.contatore.oggi()
-        if giorno is None or self.archivio is None:
+        periodi = self.contatore.periodi()
+        if periodi is None or self.archivio is None:
             return
+        giorno, mese, ieri, lunedi = periodi
         self._archivio_giorno = self.archivio.totale(self.nome, giorno)
         self._archivio_mese = self.archivio.totale(self.nome, mese)
+        kwh, righe = self.archivio.somma(self.nome, ieri, ieri)
+        self._archivio_ieri = kwh if righe else None
+        self._archivio_settimana, _ = self.archivio.somma(self.nome, lunedi, giorno)
         self._copertura = self.archivio.copertura(self.nome, giorno)
 
     def _pubblica_energia(self):
-        giorno, mese = self.contatore.oggi()
-        if giorno is None:
+        periodi = self.contatore.periodi()
+        if periodi is None:
             return
+        giorno, mese, ieri, lunedi = periodi
         parziale = self.contatore.kwh_parziale
-        corpo = {
-            "kwh_oggi": round(self._archivio_giorno + parziale, 3),
-            "kwh_mese": round(self._archivio_mese + parziale, 3),
-            "giorno": giorno,
-            "mese": mese,
-            "sorgente": self.contatore.sorgente or "ignota",
-        }
+        # L'ora in corso si somma ai tre periodi che contengono oggi. A ieri no:
+        # e' un giorno chiuso, e sommargliela lo farebbe crescere durante la
+        # giornata — un numero che si muove quando non dovrebbe e' peggio di un
+        # numero assente, perche' nessuno va a verificarlo.
+        corpo = {"kwh_oggi": round(self._archivio_giorno + parziale, 3)}
+        if self._archivio_ieri is not None:
+            corpo["kwh_ieri"] = round(self._archivio_ieri, 3)
+        corpo["kwh_settimana"] = round(self._archivio_settimana + parziale, 3)
+        corpo["kwh_mese"] = round(self._archivio_mese + parziale, 3)
+        corpo["giorno"] = giorno
+        corpo["ieri"] = ieri
+        corpo["settimana"] = lunedi
+        corpo["mese"] = mese
+        corpo["sorgente"] = self.contatore.sorgente or "ignota"
         if self._copertura is not None:
             corpo["copertura_oggi"] = self._copertura
         payload = json.dumps(corpo, separators=(",", ":"))

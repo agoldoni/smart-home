@@ -27,17 +27,39 @@ until mosquitto_pub -h "$BROKER" -p "$PORTA" -u "$MQTT_USER" -P "$MQTT_PASS" \
   sleep 1
 done
 
+# I consumi non sono uguali per tutti, di proposito. La scheda li mostra in una
+# riga di quattro caselle in ordine fisso — oggi, ieri, settimana, mese — e i due
+# casi che la mettono alla prova non si vedono con sette payload identici: uno a
+# cui mancano dei valori, e uno con i numeri piu' larghi che il formato produca.
+consumi_di() {
+  case "$1" in
+    delta)
+      # Il payload di un ponte non aggiornato. Due caselle restano vuote, e sulla
+      # scheda al loro posto si devono vedere due trattini: mai tre numeri che
+      # scivolano a sinistra facendo leggere il mese come se fosse la settimana.
+      echo '{"kwh_oggi":0.4,"kwh_mese":12.7}' ;;
+    golf-*)
+      # Il caso peggiore del formato: quattro caratteri per casella, sul nome piu'
+      # lungo dell'elenco. Se la riga si tronca da qualche parte, si tronca qui.
+      echo '{"kwh_oggi":9.99,"kwh_ieri":99.9,"kwh_settimana":999,"kwh_mese":9999}' ;;
+    *)
+      echo '{"kwh_oggi":0.42,"kwh_ieri":1.87,"kwh_settimana":6.3,"kwh_mese":12.7}' ;;
+  esac
+}
+
 for n in $INTERRUTTORI; do
   pub "$P/$n/disponibilita" "online" -r
   pub "$P/$n/stato" '{"stato":"OFF","potenza_w":0.0}' -r
-  pub "$P/$n/energia" '{"kwh_oggi":0.4,"kwh_mese":12.7}' -r
+  pub "$P/$n/energia" "$(consumi_di "$n")" -r
 done
 
 # La luce regolabile porta il livello nello stesso payload dello stato: e' il
 # caso che a casa non esiste, ed e' l'unico modo di provare il cursore.
 pub "$P/$DIMMER/disponibilita" "online" -r
 pub "$P/$DIMMER/stato" '{"stato":"OFF","livello":0,"potenza_w":0.0}' -r
-pub "$P/$DIMMER/energia" '{"kwh_oggi":0.1,"kwh_mese":2.3}' -r
+# Lo zero di ieri non e' una casella vuota: la luce c'era e non ha consumato.
+# Sulla scheda dev'essere 0,00 e non un trattino.
+pub "$P/$DIMMER/energia" '{"kwh_oggi":0.1,"kwh_ieri":0,"kwh_settimana":0.8,"kwh_mese":2.3}' -r
 
 # Il sensore non si comanda: pubblica un valore e basta.
 pub "$P/$SENSORE/disponibilita" "online" -r

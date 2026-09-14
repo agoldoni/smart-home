@@ -14,7 +14,8 @@ export function topicRegistro(prefisso) {
 /** I campi che, vuoti, vanno scritti come null e non come stringa vuota. */
 const NULLABILI = [
   'campo_stato', 'campo_potenza',
-  'topic_energia', 'campo_kwh_oggi', 'campo_kwh_mese',
+  'topic_energia', 'campo_kwh_oggi', 'campo_kwh_ieri',
+  'campo_kwh_settimana', 'campo_kwh_mese',
   'topic_disponibilita',
   'topic_stato_livello', 'topic_comando_livello', 'campo_livello',
 ];
@@ -145,6 +146,8 @@ function serializza(d) {
     campo_potenza: opzionale('campo_potenza'),
     topic_energia: opzionale('topic_energia'),
     campo_kwh_oggi: opzionale('campo_kwh_oggi'),
+    campo_kwh_ieri: opzionale('campo_kwh_ieri'),
+    campo_kwh_settimana: opzionale('campo_kwh_settimana'),
     campo_kwh_mese: opzionale('campo_kwh_mese'),
     topic_disponibilita: opzionale('topic_disponibilita'),
     payload_disponibile: testo('payload_disponibile', 'online'),

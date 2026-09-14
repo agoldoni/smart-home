@@ -51,6 +51,12 @@ export const CAMPI = [
         aiuto: 'Dove qualcuno pubblica i kWh accumulati. Vuoto se nessuno li tiene.',
       },
       { chiave: 'campo_kwh_oggi', etichetta: 'Campo JSON dei kWh di oggi' },
+      { chiave: 'campo_kwh_ieri', etichetta: 'Campo JSON dei kWh di ieri' },
+      {
+        chiave: 'campo_kwh_settimana',
+        etichetta: 'Campo JSON dei kWh della settimana',
+        aiuto: 'La settimana in corso, da lunedì. Per le prese del ponte: kwh_settimana.',
+      },
       { chiave: 'campo_kwh_mese', etichetta: 'Campo JSON dei kWh del mese' },
     ],
   },

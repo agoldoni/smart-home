@@ -81,6 +81,12 @@ class DeviceListensLikeTest {
         assertFalse(boiler.listensLike(boiler.copy(stateJsonKey = "POWER")))
         assertFalse(boiler.listensLike(boiler.copy(powerJsonKey = "potenza_w")))
         assertFalse(boiler.listensLike(boiler.copy(energyTodayJsonKey = "kwh_oggi")))
+        // I due campi della 005 contano come gli altri, e ci entrano da soli
+        // perche' il predicato e' scritto per esclusione. La conseguenza e'
+        // voluta: il primo registro che li porta risottoscrive le prese una
+        // volta, ed e' giusto — da quel momento il payload si legge diverso.
+        assertFalse(boiler.listensLike(boiler.copy(energyYesterdayJsonKey = "kwh_ieri")))
+        assertFalse(boiler.listensLike(boiler.copy(energyWeekJsonKey = "kwh_settimana")))
     }
 
     @Test

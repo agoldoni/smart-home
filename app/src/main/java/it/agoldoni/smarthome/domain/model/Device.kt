@@ -66,6 +66,14 @@ data class Device(
     val energyTopic: String? = null,
     /** Campo JSON con i kWh di oggi, dentro il payload dell'energia. */
     val energyTodayJsonKey: String? = null,
+    /**
+     * Campo JSON con i kWh di ieri. Resta vuoto anche per chi i consumi li tiene,
+     * se chi li pubblica e' piu' vecchio di questo campo: in quel caso la scheda
+     * mostra un segnaposto, che e' la verita — non lo sa nessuno.
+     */
+    val energyYesterdayJsonKey: String? = null,
+    /** Campo JSON con i kWh della settimana in corso, che comincia il lunedi. */
+    val energyWeekJsonKey: String? = null,
     /** Campo JSON con i kWh del mese in corso. */
     val energyMonthJsonKey: String? = null,
     /**

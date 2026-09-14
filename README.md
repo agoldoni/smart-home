@@ -69,7 +69,7 @@ che contano:
 | Campo JSON dello stato | Da compilare solo se il payload è JSON: il percorso del campo, con il punto per i livelli annidati. |
 | Campo JSON della potenza | Il campo con i watt assorbiti, per chi li misura. Compilato, la scheda li mostra accanto allo stato. |
 | Topic dei consumi | Dove qualcuno pubblica i kWh accumulati. Sta a parte dallo stato perché è una grandezza con un altro tempo: un totale non si azzera quando la presa si spegne. |
-| Campo JSON dei kWh di oggi / del mese | I due campi da leggere in quel payload. La scheda li mostra su una riga sua, sotto lo stato. |
+| Campo JSON dei kWh di oggi / ieri / settimana / mese | I quattro campi da leggere in quel payload. La scheda li mostra su una riga sua, sotto lo stato, **in quest'ordine**. Obbligatorio è solo quello di oggi: gli altri, lasciati vuoti, diventano un trattino. |
 | Topic di disponibilità | Dove il dispositivo dichiara di essere vivo. Facoltativo, ma senza di esso una scheda continua a mostrare l'ultimo stato anche quando il dispositivo non c'è più. |
 | Topic di comando | Dove l'app pubblica. Niente wildcard: il broker rifiuterebbe il messaggio. |
 | Payload acceso / spento | I due valori che il dispositivo capisce, e che l'app riconosce nello stato. |
@@ -141,16 +141,48 @@ Campo JSON della potenza:  potenza_w
 Topic di comando:          casa/frigorifero/comando
 Topic di disponibilità:    casa/frigorifero/disponibilita
 Topic dei consumi:         casa/frigorifero/energia
-Campo JSON kWh oggi/mese:  kwh_oggi / kwh_mese
+Campo JSON kWh oggi:       kwh_oggi
+Campo JSON kWh ieri:       kwh_ieri
+Campo JSON kWh settimana:  kwh_settimana
+Campo JSON kWh mese:       kwh_mese
 ```
 
 La potenza compare sulla scheda accanto ad "Acceso", e risponde alla domanda che
 l'interruttore da solo non risponde: la presa è alimentata, ma l'elettrodomestico attaccato
-sta lavorando? Sotto, su una riga sua, i consumi accumulati — `0,84 kWh oggi · 27,3 questo
-mese` — che il ponte tiene ora per ora in un archivio interrogabile per giorni, mesi e anni
-(vedi `bridge/README.md`). Sotto i dieci watt il numero ha il decimale — fra `0,0 W` e `3,0 W` passa la
+sta lavorando? Sotto i dieci watt il numero ha il decimale — fra `0,0 W` e `3,0 W` passa la
 differenza fra spento davvero e in attesa — sopra è intero. A presa spenta non si mostra:
 a relay aperto i watt sono zero per forza.
+
+### I consumi, in quattro numeri
+
+Sotto, su una riga sua, i consumi accumulati che il ponte tiene ora per ora in un archivio
+interrogabile per giorni, mesi e anni (vedi `bridge/README.md`):
+
+```
+0,42/1,87/6,30/12,7 kWh
+```
+
+**Sono, in quest'ordine: oggi, ieri, la settimana in corso, il mese in corso.** Non c'è
+nessuna etichetta sulla scheda, ed è una scelta: le sette schede stanno in un elenco che si
+scorre col pollice, e quattro etichette scritte per esteso costerebbero una riga a testa.
+L'ordine si impara una volta e poi non si legge più — si guarda se il primo numero è più
+grande del secondo, che è la domanda vera. Questa è l'unica legenda che esiste, ed è il
+motivo per cui **quell'ordine non cambierà**.
+
+Chi si fa leggere la scheda da TalkBack sente invece le etichette per esteso: lì una barra
+non si sente, e quattro numeri di fila non vorrebbero dire niente.
+
+Le caselle sono **sempre quattro**, anche quando un valore non c'è: al suo posto va un
+trattino, `0,42/–/–/12,7`. Non è tipografia — tre numeri che scivolassero a sinistra
+farebbero leggere il mese al posto della settimana, e nessuno se ne accorgerebbe. Un
+trattino compare quando nessuno pubblica quel valore: il campo JSON non è compilato, oppure
+chi conta è più vecchio di questi numeri. Uno **zero** invece è una risposta — quel
+dispositivo, in quel periodo, non ha consumato — e si scrive `0,00`.
+
+Il formato ha tre scalini: due decimali sotto i dieci kWh, uno sotto i cento, nessuno sopra.
+Un boiler non fa 47,83 kWh, fa 47,8, e a 438 kWh in un mese il decimale è una cifra che
+balla senza dire niente. Così ogni numero sta in quattro caratteri e la riga peggiore
+possibile — `9,99/99,9/999/9999 kWh` — è di ventidue caratteri.
 
 ## Il registro condiviso
 

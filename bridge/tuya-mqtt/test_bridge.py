@@ -313,5 +313,218 @@ class ArchivioSuFile(unittest.TestCase):
         self.assertAlmostEqual(self.archivio.totale("ignota", "2026-09-12"), 1.0, places=3)
 
 
+class PeriodiInLocale(unittest.TestCase):
+    """Ieri e il lunedi', calcolati sulle date e non sui secondi.
+
+    E' la classe che esiste per due giorni l'anno. Un `_ora - 86400` passerebbe
+    tutti gli altri trecentosessantatre, e sbaglierebbe proprio nei due in cui
+    nessuno andrebbe a controllare.
+    """
+
+    def _periodi(self, istante):
+        c = contatore()
+        c.aggiorna(epoch(istante), {"17": 0})
+        return c.periodi()
+
+    def test_prima_della_prima_lettura_non_si_sa_niente(self):
+        self.assertIsNone(contatore().periodi())
+
+    def test_i_quattro_periodi_di_un_giorno_qualsiasi(self):
+        # Sabato 12 settembre 2026, le 17 UTC: le 19 in Italia.
+        giorno, mese, ieri, lunedi = self._periodi("2026-09-12T17:00:00Z")
+        self.assertEqual(giorno, "2026-09-12")
+        self.assertEqual(mese, "2026-09")
+        self.assertEqual(ieri, "2026-09-11")
+        self.assertEqual(lunedi, "2026-09-07")
+
+    def test_di_lunedi_la_settimana_comincia_oggi(self):
+        giorno, _, _, lunedi = self._periodi("2026-09-07T08:00:00Z")
+        self.assertEqual(giorno, lunedi)
+
+    def test_di_domenica_il_lunedi_e_sei_giorni_indietro(self):
+        _, _, _, lunedi = self._periodi("2026-09-13T08:00:00Z")
+        self.assertEqual(lunedi, "2026-09-07")
+
+    def test_la_settimana_scavalca_il_mese(self):
+        # Mercoledi' 1 ottobre 2026: il lunedi' e' ancora settembre.
+        giorno, mese, _, lunedi = self._periodi("2026-10-01T08:00:00Z")
+        self.assertEqual((giorno, mese, lunedi), ("2026-10-01", "2026-10", "2026-09-28"))
+
+    def test_ieri_del_primo_del_mese_e_l_ultimo_del_mese_prima(self):
+        _, _, ieri, _ = self._periodi("2026-10-01T08:00:00Z")
+        self.assertEqual(ieri, "2026-09-30")
+
+    def test_il_giorno_dopo_il_ritorno_all_ora_solare_ieri_e_quello_da_25_ore(self):
+        # Lunedi' 26 ottobre, in ora solare: il giorno prima ne e' durato 25, e
+        # sottrarre 86400 secondi riporterebbe dentro il 25 invece che al 25.
+        giorno, _, ieri, lunedi = self._periodi("2026-10-26T08:00:00Z")
+        self.assertEqual((giorno, ieri), ("2026-10-26", "2026-10-25"))
+        self.assertEqual(lunedi, "2026-10-26")
+
+    def test_il_giorno_dopo_il_passaggio_all_ora_legale(self):
+        # Lunedi' 30 marzo: il 29 e' durato 23 ore.
+        giorno, _, ieri, _ = self._periodi("2026-03-30T08:00:00Z")
+        self.assertEqual((giorno, ieri), ("2026-03-30", "2026-03-29"))
+
+    def test_a_mezzanotte_italiana_il_giorno_e_gia_cambiato(self):
+        # Le 22:30 UTC sono le 00:30 del giorno dopo, in ora legale.
+        giorno, _, ieri, _ = self._periodi("2026-09-12T22:30:00Z")
+        self.assertEqual((giorno, ieri), ("2026-09-13", "2026-09-12"))
+
+
+class SommaSuUnIntervallo(unittest.TestCase):
+    """La somma che sa distinguere lo zero dal niente."""
+
+    def setUp(self):
+        self.cartella = tempfile.mkdtemp()
+        self.archivio = bridge.Archivio(os.path.join(self.cartella, "prova.db"))
+        self.archivio.dichiara_fattore("boiler", "dp17", 1.0)
+
+    def tearDown(self):
+        shutil.rmtree(self.cartella, ignore_errors=True)
+
+    def _ora(self, giorno, ora, grezzo):
+        self.archivio.scrivi(("boiler", f"{giorno}T{ora:02d}:00:00Z", giorno, ora,
+                              grezzo, "dp17", 1.0))
+
+    def test_nessuna_riga_non_e_zero(self):
+        kwh, righe = self.archivio.somma("boiler", "2026-09-11", "2026-09-11")
+        self.assertEqual((kwh, righe), (0, 0))
+
+    def test_una_riga_che_vale_zero_e_una_riga(self):
+        # La presa c'era e non ha consumato: e' un fatto, non un buco.
+        self._ora("2026-09-11", 3, 0)
+        kwh, righe = self.archivio.somma("boiler", "2026-09-11", "2026-09-11")
+        self.assertEqual((kwh, righe), (0, 1))
+
+    def test_l_intervallo_comprende_gli_estremi(self):
+        self._ora("2026-09-07", 10, 1000)
+        self._ora("2026-09-13", 10, 2000)
+        kwh, righe = self.archivio.somma("boiler", "2026-09-07", "2026-09-13")
+        self.assertAlmostEqual(kwh, 3.0, places=3)
+        self.assertEqual(righe, 2)
+
+    def test_fuori_dall_intervallo_non_si_somma(self):
+        self._ora("2026-09-06", 10, 5000)      # la domenica prima
+        self._ora("2026-09-07", 10, 1000)
+        kwh, _ = self.archivio.somma("boiler", "2026-09-07", "2026-09-13")
+        self.assertAlmostEqual(kwh, 1.0, places=3)
+
+    def test_le_prese_non_si_mescolano(self):
+        self.archivio.dichiara_fattore("frigorifero", "dp17", 1.0)
+        self.archivio.scrivi(("frigorifero", "2026-09-11T10:00:00Z", "2026-09-11", 10,
+                              9000, "dp17", 1.0))
+        self._ora("2026-09-11", 10, 1000)
+        kwh, righe = self.archivio.somma("boiler", "2026-09-11", "2026-09-11")
+        self.assertAlmostEqual(kwh, 1.0, places=3)
+        self.assertEqual(righe, 1)
+
+
+class PayloadDeiConsumi(unittest.TestCase):
+    """Cosa finisce sul topic dell'energia, e cosa non ci finisce.
+
+    Si guarda il payload e non i metodi: la regola che conta — ieri non si
+    pubblica quando non si sa — e' una proprieta' del messaggio, e provarla
+    sul calcolo lascerebbe scoperto proprio il punto in cui si rompe.
+    """
+
+    def setUp(self):
+        self.cartella = tempfile.mkdtemp()
+        self.archivio = bridge.Archivio(os.path.join(self.cartella, "prova.db"))
+        self.archivio.dichiara_fattore("prova", "dp17", 1.0)
+        self.presa = presa()
+        self.presa.archivio = self.archivio
+        self.presa.contatore = contatore()
+        self.pubblicati = []
+        self.presa._pubblica = lambda topic, payload, ritenuto=True: \
+            self.pubblicati.append((topic, payload))
+
+    def tearDown(self):
+        shutil.rmtree(self.cartella, ignore_errors=True)
+
+    def _ora(self, giorno, ora, grezzo):
+        self.archivio.scrivi(("prova", f"{giorno}T{ora:02d}:00:00Z", giorno, ora,
+                              grezzo, "dp17", 1.0))
+
+    def _energia(self, istante="2026-09-12T17:00:00Z"):
+        """Una lettura, e il payload dei consumi che ne esce."""
+        self.presa.contatore.aggiorna(epoch(istante), {"17": 0})
+        self.presa._rileggi_totali()
+        self.presa._ultima_energia = None
+        self.presa._pubblica_energia()
+        topic, payload = self.pubblicati[-1]
+        self.assertEqual(topic, "casa/prova/energia")
+        return json.loads(payload)
+
+    def test_i_quattro_valori_e_le_quattro_date(self):
+        self._ora("2026-09-11", 10, 2000)      # ieri
+        self._ora("2026-09-12", 10, 500)       # oggi, un'ora gia' chiusa
+        self._ora("2026-09-07", 10, 1500)      # lunedi'
+        corpo = self._energia()
+        self.assertAlmostEqual(corpo["kwh_oggi"], 0.5, places=3)
+        self.assertAlmostEqual(corpo["kwh_ieri"], 2.0, places=3)
+        self.assertAlmostEqual(corpo["kwh_settimana"], 4.0, places=3)
+        self.assertAlmostEqual(corpo["kwh_mese"], 4.0, places=3)
+        self.assertEqual(corpo["giorno"], "2026-09-12")
+        self.assertEqual(corpo["ieri"], "2026-09-11")
+        self.assertEqual(corpo["settimana"], "2026-09-07")
+        self.assertEqual(corpo["mese"], "2026-09")
+
+    def test_senza_righe_di_ieri_la_chiave_non_c_e(self):
+        self._ora("2026-09-12", 10, 500)
+        corpo = self._energia()
+        self.assertNotIn("kwh_ieri", corpo)
+        self.assertIn("kwh_oggi", corpo)
+
+    def test_un_ieri_che_vale_zero_si_pubblica(self):
+        # La presa c'era tutto il giorno e non ha consumato: zero e' la risposta,
+        # e non va confuso con la chiave assente del test qui sopra.
+        self._ora("2026-09-11", 10, 0)
+        corpo = self._energia()
+        self.assertEqual(corpo["kwh_ieri"], 0)
+
+    def test_la_domenica_prima_non_entra_nella_settimana(self):
+        self._ora("2026-09-06", 10, 9000)      # domenica
+        self._ora("2026-09-07", 10, 1000)      # lunedi'
+        corpo = self._energia()
+        self.assertAlmostEqual(corpo["kwh_settimana"], 1.0, places=3)
+
+    def test_di_lunedi_la_settimana_vale_quanto_oggi(self):
+        self._ora("2026-09-06", 10, 9000)
+        self._ora("2026-09-07", 8, 300)
+        corpo = self._energia("2026-09-07T17:00:00Z")
+        self.assertEqual(corpo["kwh_settimana"], corpo["kwh_oggi"])
+
+    def test_la_settimana_del_cambio_d_ora_e_la_somma_delle_sue_righe(self):
+        # Lunedi' 19 - domenica 25 ottobre 2026: 169 ore, perche' il 25 ne ha 25.
+        for giorno, ora in [("2026-10-19", 8), ("2026-10-22", 14),
+                            ("2026-10-25", 2), ("2026-10-25", 3)]:
+            self._ora(giorno, ora, 1000)
+        self._ora("2026-10-18", 12, 7000)      # la domenica prima: fuori
+        corpo = self._energia("2026-10-25T20:00:00Z")
+        self.assertEqual(corpo["settimana"], "2026-10-19")
+        self.assertAlmostEqual(corpo["kwh_settimana"], 4.0, places=3)
+
+    def test_l_ora_in_corso_si_somma_a_oggi_ma_non_a_ieri(self):
+        self._ora("2026-09-11", 10, 2000)
+        self.presa.contatore.aggiorna(epoch("2026-09-12T17:00:00Z"), {"17": 100})
+        self.presa.contatore.aggiorna(epoch("2026-09-12T17:10:00Z"), {"17": 400})
+        self.presa._rileggi_totali()
+        self.presa._ultima_energia = None
+        self.presa._pubblica_energia()
+        corpo = json.loads(self.pubblicati[-1][1])
+        self.assertAlmostEqual(corpo["kwh_oggi"], 0.3, places=3)
+        self.assertAlmostEqual(corpo["kwh_ieri"], 2.0, places=3)
+        # L'11 e' un venerdi': sta nella stessa settimana del 12, quindi la
+        # settimana porta i 2 kWh di ieri **piu'** l'ora in corso. E' il caso che
+        # distingue "ieri non prende il parziale" da "ieri e' escluso da tutto".
+        self.assertAlmostEqual(corpo["kwh_settimana"], 2.3, places=3)
+
+    def test_senza_archivio_ieri_non_si_inventa(self):
+        self.presa.archivio = None
+        corpo = self._energia()
+        self.assertNotIn("kwh_ieri", corpo)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

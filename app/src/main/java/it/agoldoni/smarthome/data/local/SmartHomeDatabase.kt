@@ -5,7 +5,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [DeviceEntity::class], version = 6, exportSchema = true)
+@Database(entities = [DeviceEntity::class], version = 7, exportSchema = true)
 abstract class SmartHomeDatabase : RoomDatabase() {
     abstract fun deviceDao(): DeviceDao
 }
@@ -89,5 +89,23 @@ val MIGRATION_4_5 = object : Migration(4, 5) {
 val MIGRATION_5_6 = object : Migration(5, 6) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL("ALTER TABLE devices ADD COLUMN position INTEGER")
+    }
+}
+
+/**
+ * Aggiunge i due campi dei consumi di ieri e della settimana.
+ *
+ * Nulle come le tre colonne dell'energia che le precedono, e per la stessa
+ * ragione: di questi dispositivi nessuno pubblica ieri, ed e' vero — fino a
+ * ieri nessuno lo pubblicava per nessuno. Nullo qui non e' un ripiego, e' il
+ * motivo per cui la scheda mostrera un segnaposto invece di uno zero inventato.
+ *
+ * Nessun `DEFAULT`: una stringa vuota predefinita direbbe "leggi il campo che si
+ * chiama stringa vuota", che e una cosa diversa da "non c'e niente da leggere".
+ */
+val MIGRATION_6_7 = object : Migration(6, 7) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE devices ADD COLUMN energyYesterdayJsonKey TEXT")
+        db.execSQL("ALTER TABLE devices ADD COLUMN energyWeekJsonKey TEXT")
     }
 }

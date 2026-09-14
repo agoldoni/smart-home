@@ -550,12 +550,21 @@ class MqttDeviceDriver(
             // significa che si sappia com'e adesso il dispositivo.
             val energyTopic = device.energyTopic
             if (!energyTopic.isNullOrBlank() && MqttTopics.matches(energyTopic, topic)) {
-                device.energyTodayJsonKey?.takeIf { it.isNotBlank() }?.let { key ->
-                    readNumber(payload, key)?.let { next = next.copy(kwhToday = it) }
-                }
-                device.energyMonthJsonKey?.takeIf { it.isNotBlank() }?.let { key ->
-                    readNumber(payload, key)?.let { next = next.copy(kwhMonth = it) }
-                }
+                // Qui si legge con `readSnapshotNumber` e non con `readNumber`, e
+                // la differenza sta in cosa vuol dire una chiave che non c'e. Il
+                // payload dei consumi e una fotografia intera, pubblicata da uno
+                // solo e ritenuta: `kwh_ieri` che manca vuol dire che ieri non lo
+                // sa nessuno — una presa aggiunta stamattina non ce l'ha — e
+                // tenere l'ultimo numero letto lascerebbe sulla scheda un giorno
+                // vecchio per sempre. Un payload incomprensibile invece non
+                // cancella niente: da quello non si deduce nulla, come sempre.
+                next = next.copy(
+                    kwhToday = readSnapshotNumber(payload, device.energyTodayJsonKey, next.kwhToday),
+                    kwhYesterday =
+                        readSnapshotNumber(payload, device.energyYesterdayJsonKey, next.kwhYesterday),
+                    kwhWeek = readSnapshotNumber(payload, device.energyWeekJsonKey, next.kwhWeek),
+                    kwhMonth = readSnapshotNumber(payload, device.energyMonthJsonKey, next.kwhMonth),
+                )
             }
 
             val levelTopic = device.levelStateTopic

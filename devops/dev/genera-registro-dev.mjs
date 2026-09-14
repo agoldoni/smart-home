@@ -68,6 +68,8 @@ const ELENCO = [
       campo_potenza: '',
       topic_energia: '',
       campo_kwh_oggi: '',
+      campo_kwh_ieri: '',
+      campo_kwh_settimana: '',
       campo_kwh_mese: '',
     },
   },
@@ -91,14 +93,34 @@ const dispositivi = ELENCO.map((voce, i) => {
   return d;
 });
 
-// Revisione 2 e non piu' 1: la 1 e' quella che i telefoni di sviluppo hanno gia'
-// applicato prima che esistessero le posizioni, e un documento di pari revisione
-// viene ignorato senza rumore — sembrerebbe che l'ordine non arrivi. Il broker di
-// sviluppo non ha persistenza, quindi qui non si perde niente ad alzarla.
-const doc = JSON.parse(documento(dispositivi, 2));
-doc.aggiornato = '2026-09-13T20:00:00+02:00';
+// La revisione, e **non basta che salga a ogni feature**.
+//
+// Un'app che ha gia' applicato la revisione N ignora *senza rumore* un documento
+// di revisione minore o uguale: i campi nuovi non arrivano mai e sembra che la
+// feature non funzioni. Il numero qui sotto non puo' essere l'unica verita',
+// perche' sul broker di sviluppo scrive anche il **configuratore web**, che a
+// ogni salvataggio incrementa per conto suo — il 13/09/2026 era arrivato a 16
+// mentre questo file diceva ancora 2.
+//
+// Quindi: il predefinito e' il numero della feature piu' recente, ma quando sul
+// broker ci ha messo mano un configuratore va passato a mano un numero piu' alto
+// di quello che il telefono ha gia' applicato. Lo si legge da
+// `python3 tools/debug-api.py --adb registry`, campo `revision`.
+//
+//     node devops/dev/genera-registro-dev.mjs registro-dev.json --revisione 17
+const REVISIONE = (() => {
+  const i = process.argv.indexOf('--revisione');
+  if (i < 0) return 3;
+  const n = Number(process.argv[i + 1]);
+  if (!Number.isInteger(n) || n < 0) throw new Error('--revisione vuole un intero >= 0');
+  return n;
+})();
+
+const doc = JSON.parse(documento(dispositivi, REVISIONE));
+doc.aggiornato = '2026-09-14T09:00:00+02:00';
 writeFileSync(process.argv[2] ?? 'registro-dev.json', JSON.stringify(doc, null, 1) + '\n');
 console.log(
-  `${dispositivi.length} dispositivi di sviluppo, nessun errore di validazione` +
+  `${dispositivi.length} dispositivi di sviluppo alla revisione ${REVISIONE}, ` +
+    'nessun errore di validazione' +
     (SENZA_POSIZIONI ? ' — senza posizioni, come un registro di prima della 004' : ''),
 );

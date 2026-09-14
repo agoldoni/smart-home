@@ -58,7 +58,7 @@ class RegistryContractTest {
     }
 
     @Test
-    fun `la presa porta i quattro topic e i quattro campi che il ponte usa`() {
+    fun `la presa porta i quattro topic e i sei campi che il ponte usa`() {
         val frigo = registro.devices.single { it.name == "frigorifero" }
         assertEquals(DeviceKind.SWITCH, frigo.kind)
         assertEquals("casa/frigorifero/stato", frigo.stateTopic)
@@ -68,6 +68,8 @@ class RegistryContractTest {
         assertEquals("stato", frigo.stateJsonKey)
         assertEquals("potenza_w", frigo.powerJsonKey)
         assertEquals("kwh_oggi", frigo.energyTodayJsonKey)
+        assertEquals("kwh_ieri", frigo.energyYesterdayJsonKey)
+        assertEquals("kwh_settimana", frigo.energyWeekJsonKey)
         assertEquals("kwh_mese", frigo.energyMonthJsonKey)
         assertEquals(1, frigo.qos)
         assertTrue(!frigo.retained)

@@ -182,3 +182,77 @@ class ReadNumberTest {
         assertEquals(233.4, readNumber("""{"misure":{"potenza_w":233.4}}""", "misure.potenza_w")!!, 0.001)
     }
 }
+
+/**
+ * Il payload dei consumi, che e una **fotografia** e non una toppa.
+ *
+ * La differenza con [readNumber] e tutta in cosa voglia dire una chiave che non
+ * c'e. Sullo stato non vuol dire niente — le prese mandano anche aggiornamenti
+ * parziali, col solo campo cambiato — ma il topic dell'energia lo pubblica uno
+ * solo, per intero e ritenuto: `kwh_ieri` che manca vuol dire che ieri non lo sa
+ * nessuno, e tenere l'ultimo letto lascerebbe sulla scheda un giorno vecchio per
+ * sempre, senza che niente lo dica.
+ *
+ * Resta fuori il payload incomprensibile, che non cancella niente: da un valore
+ * che non si e capito non si deduce nulla, come per la disponibilita.
+ */
+class ReadSnapshotNumberTest {
+
+    private val completo = """{"kwh_oggi":0.42,"kwh_ieri":1.87,"kwh_mese":12.7}"""
+
+    @Test
+    fun `legge il valore quando c'e`() {
+        assertEquals(1.87, readSnapshotNumber(completo, "kwh_ieri", null)!!, 0.001)
+    }
+
+    @Test
+    fun `il valore nuovo sostituisce quello vecchio`() {
+        assertEquals(1.87, readSnapshotNumber(completo, "kwh_ieri", 99.0)!!, 0.001)
+    }
+
+    @Test
+    fun `legge lo zero, che e un valore come un altro`() {
+        assertEquals(0.0, readSnapshotNumber("""{"kwh_ieri":0}""", "kwh_ieri", 5.0)!!, 0.001)
+    }
+
+    @Test
+    fun `una chiave che non c'e riporta il valore a non saputo`() {
+        // E' la meta' che fa funzionare il trattino sulla scheda: il ponte omette
+        // kwh_ieri quando l'archivio non ha righe di ieri, e quell'assenza deve
+        // arrivare fino alla casella.
+        assertNull(readSnapshotNumber("""{"kwh_oggi":0.42}""", "kwh_ieri", 1.87))
+    }
+
+    @Test
+    fun `una chiave a null vale come una chiave che non c'e`() {
+        assertNull(readSnapshotNumber("""{"kwh_ieri":null}""", "kwh_ieri", 1.87))
+    }
+
+    @Test
+    fun `una chiave con dentro qualcosa che non e un numero non cancella niente`() {
+        assertEquals(1.87, readSnapshotNumber("""{"kwh_ieri":"boh"}""", "kwh_ieri", 1.87)!!, 0.001)
+    }
+
+    @Test
+    fun `un payload che non e JSON non cancella niente`() {
+        assertEquals(1.87, readSnapshotNumber("qualcosa e andato storto", "kwh_ieri", 1.87)!!, 0.001)
+        assertEquals(1.87, readSnapshotNumber("", "kwh_ieri", 1.87)!!, 0.001)
+    }
+
+    @Test
+    fun `un campo non dichiarato non tocca il valore`() {
+        // Nessuno ha mai detto dove leggere: non e questo payload a cambiarlo.
+        assertEquals(1.87, readSnapshotNumber(completo, null, 1.87)!!, 0.001)
+        assertEquals(1.87, readSnapshotNumber(completo, "  ", 1.87)!!, 0.001)
+    }
+
+    @Test
+    fun `legge un campo annidato, e ne sente anche l'assenza`() {
+        val annidato = """{"consumi":{"kwh_ieri":1.87}}"""
+        assertEquals(1.87, readSnapshotNumber(annidato, "consumi.kwh_ieri", null)!!, 0.001)
+        assertNull(readSnapshotNumber(annidato, "consumi.kwh_settimana", 6.3))
+        // Se il ramo intermedio non c'e non si conclude niente: e' un payload
+        // che non somiglia a quello che ci si aspettava, non un valore sparito.
+        assertEquals(6.3, readSnapshotNumber(annidato, "altro.kwh_settimana", 6.3)!!, 0.001)
+    }
+}
