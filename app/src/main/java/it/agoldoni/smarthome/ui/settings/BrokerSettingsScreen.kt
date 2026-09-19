@@ -20,6 +20,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
@@ -43,6 +46,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import it.agoldoni.smarthome.R
 import it.agoldoni.smarthome.data.settings.RegistrySettings
+import it.agoldoni.smarthome.data.settings.ThemeChoice
 import it.agoldoni.smarthome.diagnostics.DebugStatus
 import it.agoldoni.smarthome.domain.model.ConnectionState
 import it.agoldoni.smarthome.domain.registry.NO_REVISION
@@ -64,6 +68,7 @@ fun BrokerSettingsScreen(
     val connection by viewModel.connection.collectAsStateWithLifecycle()
     val debugStatus by viewModel.debugStatus.collectAsStateWithLifecycle()
     val registry by viewModel.registry.collectAsStateWithLifecycle()
+    val theme by viewModel.theme.collectAsStateWithLifecycle()
     val form = state.form
     val snackbarHostState = remember { SnackbarHostState() }
     var showPassword by remember { mutableStateOf(false) }
@@ -178,6 +183,8 @@ fun BrokerSettingsScreen(
 
             DebugApiSection(debugStatus, onToggle = viewModel::setDebugApi)
 
+            AspettoSection(theme, onScegli = viewModel::setTheme)
+
             Spacer(Modifier.height(32.dp))
         }
     }
@@ -289,6 +296,57 @@ private fun DebugApiSection(status: DebugStatus, onToggle: (Boolean) -> Unit) {
         } else {
             MaterialTheme.colorScheme.onSurfaceVariant
         },
+    )
+}
+
+/**
+ * Il tema dell'app: tre voci, una riga.
+ *
+ * Tre segmenti e non tre righe con un pallino perche' le voci sono corte, si
+ * escludono, e in una schermata gia' lunga valgono una riga sola. La scelta
+ * vale **su questo telefono**, come il lucchetto: non passa dal registro.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AspettoSection(scelta: ThemeChoice, onScegli: (ThemeChoice) -> Unit) {
+    val voci = listOf(
+        ThemeChoice.SISTEMA to R.string.theme_system,
+        ThemeChoice.CHIARO to R.string.theme_light,
+        ThemeChoice.SCURO to R.string.theme_dark,
+    )
+
+    SectionHeader(stringResource(R.string.theme_title))
+
+    SingleChoiceSegmentedButtonRow(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp)
+            // I segmenti si disegnano alti 40 dp e non applicano da se' la
+            // dimensione interattiva minima: i 48 dp del bersaglio li deve
+            // imporre chi li usa.
+            .height(48.dp),
+    ) {
+        voci.forEachIndexed { indice, (voce, etichetta) ->
+            SegmentedButton(
+                selected = scelta == voce,
+                onClick = { onScegli(voce) },
+                shape = SegmentedButtonDefaults.itemShape(index = indice, count = voci.size),
+            ) {
+                Text(stringResource(etichetta))
+            }
+        }
+    }
+
+    Text(
+        text = stringResource(
+            if (scelta == ThemeChoice.SISTEMA) {
+                R.string.theme_follows_system
+            } else {
+                R.string.theme_fixed
+            },
+        ),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
 }
 

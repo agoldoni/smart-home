@@ -1,0 +1,14 @@
+<resources>
+    <!-- Da Android 12 la finestra d'avvio e' la splash di sistema, che ha un
+         attributo suo: senza questo, `windowBackground` non basta. Il resto
+         della spiegazione e' in values/themes.xml. -->
+    <style name="Theme.SmartHome.Avvio.Chiaro" parent="Theme.SmartHome">
+        <item name="android:windowBackground">@android:color/background_light</item>
+        <item name="android:windowSplashScreenBackground">@android:color/background_light</item>
+    </style>
+
+    <style name="Theme.SmartHome.Avvio.Scuro" parent="Theme.SmartHome">
+        <item name="android:windowBackground">@android:color/background_dark</item>
+        <item name="android:windowSplashScreenBackground">@android:color/background_dark</item>
+    </style>
+</resources>

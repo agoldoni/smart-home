@@ -1,10 +1,116 @@
 # Tema chiaro, scuro, di sistema — Implementation Plan
 
-**Stato:** Bozza — in attesa di approvazione
+**Stato:** Implementato e verificato sul telefono — restano TC-11 su un Android 8-11 e TalkBack
 **Autore:** Alberto Goldoni
 **Data:** 19 settembre 2026
-**Versione:** 1.0
+**Versione:** 1.2 (19 settembre 2026: esito del giro sul telefono, R-12 e la correzione della finestra d'avvio)
 **Feature:** `007-tema-chiaro-scuro`
+
+---
+
+## 0. Stato di avanzamento
+
+**19 settembre 2026 — implementato e verificato sul telefono.** T-01…T-16 fatti, T-14
+compreso. Restano due verifiche che qui non si possono fare, elencate in fondo.
+
+### Verificato sul PC
+
+- `./gradlew testDebugUnitTest assembleDebug lintDebug` passa: **117 test, 0 falliti**
+- **Lint: nessuna segnalazione nuova.** Restano le undici di prima — il tetto dichiarato del
+  catalogo delle versioni e due stringhe del registro inutilizzate. Una nuova c'era ed è
+  stata chiusa: `UseKtx` su `ColorDrawable`, sostituito da `toDrawable()`
+- **T-13, chiusura di R-1:** `grep -rn isSystemInDarkTheme app/src` dà **una sola chiamata**,
+  `MainActivity.kt:43`, più il suo import. Erano tre
+
+### Verificato sul telefono, contro `devops/dev`
+
+Xiaomi 23117RA68G, Android 16, sette prese finte, API di debug accesa. Il telefono aveva
+già la 1.4.0 con la **vista bloccata**, che è la precondizione che serviva a TC-15.
+
+| TC | Esito | Come |
+|---|---|---|
+| **TC-15** | ✅ | Installata la 1.5.0 sopra la 1.4.0: `vista.preferences_pb` **non toccato** (stessi byte, stessa data), lucchetto ancora chiuso a schermo. R-8 non è scattato |
+| **TC-05** | ✅ | Matrice 2×3 completa. Il caso che conta — telefono **chiaro**, app **scura** — ha lo sfondo della scheda accesa a `#1F5B28`, cioè la variante scura, campionato dal pixel |
+| **TC-06** | ✅ | Insetto di debug campionato su sei scatti (pulsa): `#FF5A5A` con tema scuro forzato, `#D63C3D` con tema chiaro forzato su telefono scuro — cioè `#D32F2F` sfumato dall'antialiasing. Le due varianti giuste, dalla parte della scelta e non del telefono |
+| **TC-07** | ✅ | Barre di stato e navigazione con il contrasto giusto in tutte le combinazioni, elenco e impostazioni |
+| **TC-08** | ✅ **dopo una correzione** | Avvio a freddo filmato e analizzato a 60 fps: **0 fotogrammi chiari su 300** con «Scuro» su telefono chiaro. Prima della correzione erano 130, cioè 2,2 secondi di bianco pieno. Vedi la decisione 9 |
+| **TC-09** | ✅ | Rotazione e riapertura dai recenti: scelta invariata, broker connesso |
+| **TC-10** | ✅ | Con «Sistema» e app aperta, `cmd uimode night yes` porta `themeEffective` da `light` a `dark`. Con «Scuro» il telefono cambia e l'app non si muove |
+| **TC-12** | ✅ | Cinque cambi di tema di fila: `collegamento.tentativi` resta **1**, `sottoscrizioni.aggiunte` resta 42. Il broker non se ne accorge, e non è un'impressione: sono i contatori |
+| **TC-13** | ✅ (in parte) | Dal dump di uiautomator i tre segmenti sono 119-121 × **48 dp**, `checkable=true`, e quello attivo ha `checked=true` con classe `RadioButton`. La semantica c'è; **sentirla con TalkBack acceso resta da fare** |
+| **TC-14** | ✅ | `debug-api.py --adb state` → `view: {'locked': …, 'theme': 'scuro', 'themeEffective': 'dark'}` |
+| **TC-11** | ⚠️ metà | Android 12+ con colori dinamici: fatto, è il telefono della prova. **Un Android 8-11 non c'era**: la strada è la stessa su tutte le versioni, ma la finestra d'avvio no (vedi R-12) |
+
+Il file `vista` alla fine del giro contiene entrambe le chiavi, e il tema **come stringa**:
+
+```
+0a0e 0a08 626c 6f63 6361 7461 1202 0801   bloccata = true
+0a11 0a04 7465 6d61 1209 2a07 5349 5354   tema = SIST
+454d 41                                   EMA
+```
+
+### Nove cose decise scrivendo, che il piano non diceva
+
+1. **`ThemeChoice` sta in `data/settings/`, non in `ui/theme/`.** È un dato salvato, sta in
+   compagnia di `BrokerSettings` e `RegistrySettings`, e il verso delle dipendenze resta
+   quello di tutto il resto dell'app: l'interfaccia legge le impostazioni, non il contrario
+2. **`SmartHomeTheme(darkTheme: Boolean)` ha perso il valore predefinito.** Il piano diceva
+   «la firma non cambia». Cambiarla è il motivo per cui il criterio di R-1 adesso è una
+   proprietà del codice e non una promessa: senza predefinito nessuno può lasciare che un
+   pezzo di app segua il telefono per distrazione, perché non compila
+3. **Sei stringhe invece di cinque:** la riga di spiegazione cambia con la scelta, perché con
+   «Sistema» la cosa da dire è che seguirà il telefono e con le altre due che **non** lo
+   seguirà più
+4. **I veli della barra di navigazione sono ricopiati a mano** (`0xe6FFFFFF` e `0x801b1b1b`).
+   `enableEdgeToEdge()` li mette da sé dove il sistema non sa fare il contrasto — prima di
+   Android 10 — ma nella libreria sono privati, e passarne altri cambierebbe l'aspetto della
+   barra sui telefoni più vecchi
+5. **Lo sfondo della finestra si impone due volte:** prima di `setContent` e dentro il
+   `DisposableEffect`
+6. **`getColor(...).toDrawable()`** invece di `ColorDrawable(...)`, per tenere la DoD sul lint
+7. **La lettura bloccante è protetta da `runCatching`.** Mettendola sul cammino dell'avvio,
+   un file di preferenze illeggibile smetterebbe di costare un tema sbagliato e comincerebbe
+   a costare un'app che non parte. Il ripiego è `SISTEMA`, che è anche il predefinito
+8. **La voce si chiama «Sistema», non «Come il sistema».** Provata sul telefono, la versione
+   lunga andava a capo dentro un segmento largo un terzo di schermo e i 48 dp la tagliavano
+   a metà. Quello che la voce non dice per esteso lo dice la riga sotto
+9. **La finestra d'avvio non è dell'Activity, e il piano lo ignorava.** Vedi R-12 qui sotto:
+   è la correzione che ha cambiato TC-08 da 2,2 secondi di bianco a zero fotogrammi chiari
+
+### R-12 — La finestra che si vede prima che il processo esista
+
+*Emerso da TC-08, non previsto in nessuna delle tre fasi.*
+
+`window.setBackgroundDrawable()` in `onCreate` non tocca la finestra d'avvio: quella la
+disegna il **sistema**, dal tema dichiarato nel manifest, prima che il processo dell'app
+esista. E quel tema segue la configurazione del telefono. Con «Scuro» su un telefono chiaro
+si vedeva un rettangolo bianco pieno per tutta la durata dell'avvio — misurata, 2,2 secondi
+su 1,9 s di `TotalTime` più il resto.
+
+La correzione è l'unica possibile: da Android 12 si dichiara **oggi il tema del prossimo
+avvio**, con `splashScreen.setSplashScreenTheme(...)`, e i due temi
+`Theme.SmartHome.Avvio.Chiaro` / `.Scuro` hanno il colore scritto invece di ereditarlo dalla
+configurazione. Due conseguenze da sapere, entrambe accettate:
+
+- **una scelta appena cambiata vale dall'avvio dopo**, non da quello immediatamente
+  successivo al tocco — il sistema usa quello che gli è stato detto l'ultima volta
+- **sotto Android 12 non c'è rimedio**: restano i decimi di secondo della finestra d'avvio
+  col colore del telefono. È anche la ragione per cui TC-11 su un Android 8-11 non è una
+  formalità
+
+### R-4, misurato
+
+La lettura bloccante del tema costa **~37 ms** (due misure: 37,6 e 35,9) su un avvio a
+freddo di **~1,9 s**, cioè il 2%. È il prezzo dei zero fotogrammi sbagliati di TC-08, e si
+paga una volta per avvio del processo.
+
+### Da finire
+
+- [ ] **TC-11 su un Android 8-11.** Non è una formalità: è l'unica versione dove la finestra
+      d'avvio resta del colore del telefono (R-12)
+- [ ] **TC-13 con TalkBack acceso.** La semantica è verificata dal dump — tre `RadioButton`,
+      `checked` sul giusto, 48 dp — ma sentirla annunciare è un'altra cosa
+- [ ] **Rilettura a distanza di un giorno**, come per le altre feature
 
 ---
 

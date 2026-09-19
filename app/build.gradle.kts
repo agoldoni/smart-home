@@ -27,8 +27,8 @@ android {
         applicationId = "it.agoldoni.smarthome"
         minSdk = 26
         targetSdk = 36
-        versionCode = 12
-        versionName = "1.4.0"
+        versionCode = 13
+        versionName = "1.5.0"
     }
 
     signingConfigs {

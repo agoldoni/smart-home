@@ -6,4 +6,20 @@
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowBackground">@android:color/background_light</item>
     </style>
+
+    <!-- I due temi della finestra d'avvio, scelti da codice.
+
+         Servono perche' la finestra che si vede prima che il processo esista la
+         crea il sistema dal tema XML, e il tema XML segue la configurazione del
+         telefono: con "Scuro" su un telefono chiaro si vedrebbe un rettangolo
+         bianco per tutto il tempo dell'avvio. Questi due non seguono niente -
+         il colore ce l'hanno scritto - e MainActivity dice al sistema quale
+         usare al prossimo avvio. -->
+    <style name="Theme.SmartHome.Avvio.Chiaro" parent="Theme.SmartHome">
+        <item name="android:windowBackground">@android:color/background_light</item>
+    </style>
+
+    <style name="Theme.SmartHome.Avvio.Scuro" parent="Theme.SmartHome">
+        <item name="android:windowBackground">@android:color/background_dark</item>
+    </style>
 </resources>

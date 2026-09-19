@@ -278,6 +278,28 @@ La password finisce in chiaro nei dati dell'app. È leggibile solo dall'app stes
 root, ed è lo stesso livello di protezione delle app di questo genere; per questo il
 manifest disattiva il backup, altrimenti uscirebbe dal telefono.
 
+### Il tema
+
+In fondo alle impostazioni, sotto **Aspetto**, tre voci: **Chiaro**, **Scuro**, **Come il
+sistema**. L'ultima è il predefinito ed è quello che l'app ha sempre fatto — chi aggiorna e
+non tocca niente non vede nessuna differenza.
+
+Serve perché questa è l'app che si apre al buio, in piedi in corridoio, per spegnere una
+presa prima di andare a dormire: chi tiene il telefono in chiaro tutto il giorno non
+dovrebbe cambiare il tema dell'intero telefono per non prendersi una schermata bianca in
+faccia. Come il lucchetto, **la scelta vale su questo telefono** e non passa dal registro
+condiviso: due telefoni sulla stessa casa possono averla diversa.
+
+Su Android 12 e successivi i colori continuano a venire dallo sfondo del telefono: la scelta
+decide chiaro o scuro, non la tavolozza. Seguono la scelta anche le due tinte che non
+vengono dallo schema — il verde della presa accesa e il rosso del segno di debug — perché
+sono fissate a mano proprio per voler dire sempre la stessa cosa, e un'app scura con il
+verde della variante chiara sarebbe il contrario di quello che serve.
+
+Dalla diagnostica si legge in `/state`, sotto `view`: `theme` dice cosa è stato scelto,
+`themeEffective` cosa si sta vedendo davvero — che con «Come il sistema» è l'unica delle due
+che informa.
+
 ## Architettura
 
 Il protocollo è l'unica parte destinata a cambiare, quindi è l'unica isolata dietro

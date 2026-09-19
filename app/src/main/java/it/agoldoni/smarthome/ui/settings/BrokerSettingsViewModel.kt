@@ -6,6 +6,8 @@ import it.agoldoni.smarthome.data.settings.BrokerSettings
 import it.agoldoni.smarthome.data.settings.BrokerSettingsStore
 import it.agoldoni.smarthome.data.settings.RegistrySettings
 import it.agoldoni.smarthome.data.settings.RegistryStore
+import it.agoldoni.smarthome.data.settings.ThemeChoice
+import it.agoldoni.smarthome.data.settings.ViewPrefsStore
 import it.agoldoni.smarthome.diagnostics.DebugBridge
 import it.agoldoni.smarthome.diagnostics.DebugStatus
 import it.agoldoni.smarthome.domain.driver.DeviceDriver
@@ -44,6 +46,7 @@ class BrokerSettingsViewModel(
     private val store: BrokerSettingsStore,
     private val driver: DeviceDriver,
     private val registryStore: RegistryStore,
+    private val viewPrefs: ViewPrefsStore,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(BrokerSettingsUiState())
@@ -63,6 +66,21 @@ class BrokerSettingsViewModel(
         started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS),
         initialValue = RegistrySettings(),
     )
+
+    /**
+     * Il tema scelto. Sta qui e non in un ViewModel suo per la stessa ragione
+     * del registro: e' una riga della schermata delle impostazioni, non una
+     * schermata.
+     */
+    val theme: StateFlow<ThemeChoice> = viewPrefs.theme.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS),
+        initialValue = ThemeChoice.SISTEMA,
+    )
+
+    fun setTheme(choice: ThemeChoice) {
+        viewModelScope.launch { viewPrefs.setTheme(choice) }
+    }
 
     fun setFollowRegistry(follow: Boolean) {
         viewModelScope.launch { registryStore.setFollow(follow) }

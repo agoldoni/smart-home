@@ -6,7 +6,7 @@ import it.agoldoni.smarthome.data.DeviceRepository
 import it.agoldoni.smarthome.data.registry.RegistryProposal
 import it.agoldoni.smarthome.data.registry.RegistryStatus
 import it.agoldoni.smarthome.data.registry.RegistrySync
-import it.agoldoni.smarthome.data.settings.ViewLockStore
+import it.agoldoni.smarthome.data.settings.ViewPrefsStore
 import it.agoldoni.smarthome.diagnostics.DebugBridge
 import it.agoldoni.smarthome.diagnostics.DebugStatus
 import it.agoldoni.smarthome.domain.driver.DeviceCommand
@@ -52,7 +52,7 @@ class DeviceListViewModel(
     repository: DeviceRepository,
     private val driver: DeviceDriver,
     private val registry: RegistrySync,
-    private val viewLock: ViewLockStore,
+    private val viewPrefs: ViewPrefsStore,
 ) : ViewModel() {
 
     /** Segue un registro: da qui non si aggiungono dispositivi. */
@@ -87,7 +87,7 @@ class DeviceListViewModel(
         driver.states,
         driver.connection,
         driver.commandsSent,
-        viewLock.locked,
+        viewPrefs.locked,
     ) { devices, states, connection, commandsSent, locked ->
         DeviceListUiState(
             devices = devices.map { DeviceUi(it, states[it.id] ?: DeviceState()) },
@@ -105,7 +105,7 @@ class DeviceListViewModel(
     fun reconnect() = driver.reconnect()
 
     fun toggleLock() {
-        viewModelScope.launch { viewLock.setLocked(!uiState.value.locked) }
+        viewModelScope.launch { viewPrefs.setLocked(!uiState.value.locked) }
     }
 
     fun setPower(device: Device, on: Boolean) = send(device, DeviceCommand.Power(on))

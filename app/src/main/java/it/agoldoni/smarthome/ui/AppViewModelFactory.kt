@@ -19,7 +19,7 @@ val AppViewModelFactory = viewModelFactory {
             container.deviceRepository,
             container.driver,
             container.registrySync,
-            container.viewLockStore,
+            container.viewPrefsStore,
         )
     }
     initializer {
@@ -28,7 +28,12 @@ val AppViewModelFactory = viewModelFactory {
     }
     initializer {
         val container = container()
-        BrokerSettingsViewModel(container.settingsStore, container.driver, container.registryStore)
+        BrokerSettingsViewModel(
+            container.settingsStore,
+            container.driver,
+            container.registryStore,
+            container.viewPrefsStore,
+        )
     }
 }
 

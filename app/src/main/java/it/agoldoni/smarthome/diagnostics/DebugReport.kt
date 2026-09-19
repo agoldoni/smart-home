@@ -182,6 +182,11 @@ internal class DebugReport(
      */
     private fun view() = JSONObject().apply {
         put("locked", container.viewLocked.value)
+        // Due chiavi e non una: la prima dice cosa ha scelto chi usa l'app, la
+        // seconda cosa sta effettivamente vedendo. Con "sistema" la seconda e'
+        // l'unica che informa.
+        put("theme", container.themeChoice.value.name.lowercase())
+        put("themeEffective", if (container.scuroOra()) "dark" else "light")
     }
 
     private fun registry() = JSONObject().apply {

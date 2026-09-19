@@ -1,6 +1,7 @@
 package it.agoldoni.smarthome.di
 
 import android.content.Context
+import android.content.res.Configuration
 import androidx.room.Room
 import it.agoldoni.smarthome.data.DeviceRepository
 import it.agoldoni.smarthome.data.registry.RegistrySync
@@ -13,7 +14,8 @@ import it.agoldoni.smarthome.data.local.MIGRATION_6_7
 import it.agoldoni.smarthome.data.local.SmartHomeDatabase
 import it.agoldoni.smarthome.data.settings.BrokerSettingsStore
 import it.agoldoni.smarthome.data.settings.RegistryStore
-import it.agoldoni.smarthome.data.settings.ViewLockStore
+import it.agoldoni.smarthome.data.settings.ThemeChoice
+import it.agoldoni.smarthome.data.settings.ViewPrefsStore
 import it.agoldoni.smarthome.diagnostics.DebugBridge
 import it.agoldoni.smarthome.domain.driver.DeviceDriver
 import it.agoldoni.smarthome.domain.model.Device
@@ -25,8 +27,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 
 /**
  * Dipendenze dell'app, costruite a mano.
@@ -62,8 +66,8 @@ class AppContainer(context: Context) {
      */
     val registryStore: RegistryStore by lazy { RegistryStore(applicationContext) }
 
-    /** Il lucchetto della vista principale. Un file suo, vedi [ViewLockStore]. */
-    val viewLockStore: ViewLockStore by lazy { ViewLockStore(applicationContext) }
+    /** Il lucchetto della vista principale. Un file suo, vedi [ViewPrefsStore]. */
+    val viewPrefsStore: ViewPrefsStore by lazy { ViewPrefsStore(applicationContext) }
 
     /**
      * Il lucchetto leggibile senza aprire una coroutine, per la stessa ragione
@@ -71,7 +75,40 @@ class AppContainer(context: Context) {
      * ha dove sospendere.
      */
     val viewLocked: StateFlow<Boolean> =
-        viewLockStore.locked.stateIn(applicationScope, SharingStarted.Eagerly, false)
+        viewPrefsStore.locked.stateIn(applicationScope, SharingStarted.Eagerly, false)
+
+    /**
+     * Il tema scelto, e il primo valore **si aspetta**.
+     *
+     * E' l'unica lettura bloccante dell'app, e c'e' una ragione sola: la
+     * schermata parte pochi millisecondi dopo questo costruttore, e un tema che
+     * arriva dopo il primo fotogramma si vede — l'app si apre bianca e diventa
+     * scura sotto gli occhi. Il file `vista` ha due chiavi e vive nei dati
+     * dell'app: e' una lettura da niente, fatta una volta sola all'avvio del
+     * processo.
+     */
+    val themeChoice: StateFlow<ThemeChoice> = viewPrefsStore.theme.stateIn(
+        scope = applicationScope,
+        started = SharingStarted.Eagerly,
+        // `runCatching` perche' questa lettura sta sul cammino dell'avvio: un
+        // file di preferenze illeggibile deve costare il tema predefinito, non
+        // un'app che non parte piu'.
+        initialValue = runCatching { runBlocking { viewPrefsStore.theme.first() } }
+            .getOrDefault(ThemeChoice.SISTEMA),
+    )
+
+    /**
+     * Siamo in scuro adesso, scelta e telefono messi insieme.
+     *
+     * Serve a chi guarda l'app da fuori la composizione — l'API di debug — dove
+     * `isSystemInDarkTheme()` non esiste e il tema di sistema si legge dalla
+     * configurazione.
+     */
+    fun scuroOra(): Boolean = themeChoice.value.scuro(sistemaScuro())
+
+    private fun sistemaScuro(): Boolean =
+        (applicationContext.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
+            Configuration.UI_MODE_NIGHT_YES
 
     val registrySync: RegistrySync by lazy {
         RegistrySync(applicationScope, driver, deviceRepository, registryStore)
